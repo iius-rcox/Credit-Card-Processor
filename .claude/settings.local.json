@@ -2,9 +2,23 @@
   "permissions": {
     "allow": [
       "Bash(powershell.exe:*)",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "Bash(npx create-next-app:*)",
+      "Bash(npx shadcn@latest init:*)",
+      "Bash(npx shadcn@latest add:*)",
+      "Bash(touch:*)",
+      "Bash(tree:*)",
+      "mcp__chrome-devtools__list_pages",
+      "Bash(npm run dev:*)",
+      "mcp__chrome-devtools__navigate_page",
+      "mcp__chrome-devtools__take_snapshot",
+      "Bash(mv:*)",
+      "mcp__chrome-devtools:*"
+
     ],
     "deny": [],
-    "ask": []
+    "ask": [
+      "Bash(taskkill:*)"
+    ]
   }
 }
