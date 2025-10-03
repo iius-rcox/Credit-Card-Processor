@@ -1,0 +1,103 @@
+openapi: 3.0.3
+info:
+  title: Process PDFs Endpoint
+  description: Process uploaded PDFs with real-time progress updates via Server-Sent Events
+  version: 1.0.0
+
+paths:
+  /api/process:
+    post:
+      summary: Process PDFs and match expenses to receipts
+      description: |
+        Initiates PDF parsing, expense matching, and report generation.
+        Returns a stream of progress updates (Server-Sent Events).
+      operationId: processPDFs
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - session_id
+              properties:
+                session_id:
+                  type: string
+                  format: uuid
+                  example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Processing stream (Server-Sent Events)
+          content:
+            text/event-stream:
+              schema:
+                type: object
+                description: |
+                  Stream of progress events. Each event is a JSON object with:
+                  - progress: Integer 0-100 representing percentage complete
+                  - step: String describing current processing step
+                  - status: String - "processing" | "complete" | "error"
+                  - error: String (only present if status is "error")
+                example: |
+                  data: {"progress": 10, "step": "Parsing Credit Card Statement...", "status": "processing"}
+
+                  data: {"progress": 25, "step": "Extracting employee data...", "status": "processing"}
+
+                  data: {"progress": 50, "step": "Parsing Expense Report...", "status": "processing"}
+
+                  data: {"progress": 75, "step": "Matching expenses to receipts...", "status": "processing"}
+
+                  data: {"progress": 90, "step": "Generating Excel report...", "status": "processing"}
+
+                  data: {"progress": 95, "step": "Generating CSV export...", "status": "processing"}
+
+                  data: {"progress": 100, "step": "Complete", "status": "complete"}
+        '400':
+          description: Bad request (invalid or missing session_id)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Invalid session_id"
+        '404':
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Session not found"
+        '422':
+          description: Processing error with partial results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Failed to parse Credit Card Statement"
+                  partial_results:
+                    type: boolean
+                    example: true
+                  details:
+                    type: string
+                    example: "Expense Report parsed successfully. Credit Card Statement parsing failed on page 3."
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Processing failed"
+
+components:
+  schemas: {}

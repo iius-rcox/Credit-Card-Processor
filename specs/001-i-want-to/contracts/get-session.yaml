@@ -1,0 +1,133 @@
+openapi: 3.0.3
+info:
+  title: Get Session Endpoint
+  description: Retrieve session data including employees and matching results
+  version: 1.0.0
+
+paths:
+  /api/session/{sessionId}:
+    get:
+      summary: Get session data
+      description: |
+        Retrieves complete session information including all employees,
+        their expenses, receipts, and matching results.
+      operationId: getSession
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Session data retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - session_id
+                  - created_at
+                  - updated_at
+                  - processing_status
+                  - employees
+                properties:
+                  session_id:
+                    type: string
+                    format: uuid
+                  created_at:
+                    type: string
+                    format: date-time
+                  updated_at:
+                    type: string
+                    format: date-time
+                  processing_status:
+                    type: string
+                    enum: [pending, processing, complete, error]
+                  error_message:
+                    type: string
+                    nullable: true
+                  employees:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - employee_id
+                        - name
+                        - card_number
+                        - completion_status
+                        - expenses
+                        - receipts
+                      properties:
+                        employee_id:
+                          type: string
+                        name:
+                          type: string
+                        card_number:
+                          type: string
+                        completion_status:
+                          type: string
+                          enum: [complete, incomplete]
+                        expenses:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              transaction_id:
+                                type: string
+                                format: uuid
+                              transaction_date:
+                                type: string
+                                format: date
+                              transaction_amount:
+                                type: number
+                                format: double
+                              transaction_name:
+                                type: string
+                              has_receipt:
+                                type: boolean
+                              has_gl_code:
+                                type: boolean
+                              status:
+                                type: string
+                                enum: ["Missing Receipt", "Missing GL Code", "Missing Both", "Complete"]
+                        receipts:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              receipt_id:
+                                type: string
+                              amount:
+                                type: number
+                                format: double
+                              gl_code:
+                                type: string
+                                nullable: true
+                              project_code:
+                                type: string
+                                nullable: true
+        '404':
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Session not found"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+
+components:
+  schemas: {}

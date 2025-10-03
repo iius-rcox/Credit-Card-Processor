@@ -1,0 +1,148 @@
+openapi: 3.0.3
+info:
+  title: Get Reports Endpoint
+  description: Download generated Excel and CSV reports for a session
+  version: 1.0.0
+
+paths:
+  /api/reports/{sessionId}:
+    get:
+      summary: Get generated reports
+      description: |
+        Retrieves download URLs for the Excel report (missing items)
+        and CSV export (pvault format) for complete employees.
+      operationId: getReports
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Reports available
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - session_id
+                  - summary
+                properties:
+                  session_id:
+                    type: string
+                    format: uuid
+                  excel_report:
+                    type: object
+                    nullable: true
+                    properties:
+                      url:
+                        type: string
+                        format: uri
+                        example: "/downloads/550e8400-e29b-41d4-a716-446655440000/report.xlsx"
+                      file_size:
+                        type: integer
+                        example: 45678
+                      row_count:
+                        type: integer
+                        description: Number of incomplete expense rows
+                        example: 12
+                      generated_at:
+                        type: string
+                        format: date-time
+                  csv_export:
+                    type: object
+                    nullable: true
+                    properties:
+                      url:
+                        type: string
+                        format: uri
+                        example: "/downloads/550e8400-e29b-41d4-a716-446655440000/export.csv"
+                      file_size:
+                        type: integer
+                        example: 23456
+                      row_count:
+                        type: integer
+                        description: Number of complete expense rows exported
+                        example: 38
+                      included_employee_count:
+                        type: integer
+                        description: Number of employees with 100% complete expenses
+                        example: 7
+                      generated_at:
+                        type: string
+                        format: date-time
+                  summary:
+                    type: object
+                    required:
+                      - total_employees
+                      - complete_employees
+                      - incomplete_employees
+                      - total_expenses
+                      - complete_expenses
+                      - expenses_missing_receipts
+                      - expenses_missing_gl_codes
+                      - expenses_missing_both
+                    properties:
+                      total_employees:
+                        type: integer
+                        example: 15
+                      complete_employees:
+                        type: integer
+                        description: Employees eligible for CSV export
+                        example: 7
+                      incomplete_employees:
+                        type: integer
+                        description: Employees with at least one missing item
+                        example: 8
+                      total_expenses:
+                        type: integer
+                        example: 50
+                      complete_expenses:
+                        type: integer
+                        example: 38
+                      expenses_missing_receipts:
+                        type: integer
+                        example: 5
+                      expenses_missing_gl_codes:
+                        type: integer
+                        example: 4
+                      expenses_missing_both:
+                        type: integer
+                        example: 3
+        '404':
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Session not found"
+        '409':
+          description: Reports not yet generated (processing incomplete)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Reports not available. Session status: processing"
+                  processing_status:
+                    type: string
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+
+components:
+  schemas: {}

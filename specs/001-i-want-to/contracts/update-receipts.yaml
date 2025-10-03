@@ -1,0 +1,150 @@
+openapi: 3.0.3
+info:
+  title: Update Receipts Endpoint
+  description: Upload a new Expense Report to re-analyze expenses
+  version: 1.0.0
+
+paths:
+  /api/session/{sessionId}/update:
+    post:
+      summary: Update expense report and re-analyze
+      description: |
+        Accepts a new Expense Software Report PDF for an existing session.
+        Re-runs the matching algorithm and regenerates reports.
+        Credit Card Statement remains unchanged.
+      operationId: updateReceipts
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - expenseReport
+              properties:
+                expenseReport:
+                  type: string
+                  format: binary
+                  description: Updated Expense Software Report PDF file
+      responses:
+        '200':
+          description: Update successful, re-analysis complete
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - session_id
+                  - updated
+                  - updated_at
+                  - summary_changes
+                properties:
+                  session_id:
+                    type: string
+                    format: uuid
+                  updated:
+                    type: boolean
+                    example: true
+                  updated_at:
+                    type: string
+                    format: date-time
+                  summary_changes:
+                    type: object
+                    properties:
+                      previous:
+                        type: object
+                        properties:
+                          complete_employees:
+                            type: integer
+                          incomplete_expenses:
+                            type: integer
+                      current:
+                        type: object
+                        properties:
+                          complete_employees:
+                            type: integer
+                          incomplete_expenses:
+                            type: integer
+                      newly_complete_employees:
+                        type: array
+                        items:
+                          type: string
+                        description: Employee IDs that became 100% complete
+                      newly_incomplete_expenses:
+                        type: array
+                        items:
+                          type: string
+                          format: uuid
+                        description: Transaction IDs that are still missing items
+                  new_excel_report_url:
+                    type: string
+                    format: uri
+                  new_csv_export_url:
+                    type: string
+                    format: uri
+        '400':
+          description: Bad request (invalid file format)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Invalid file format. PDF required."
+        '404':
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Session not found"
+        '409':
+          description: Session currently processing, cannot update
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Session is currently processing. Please wait."
+                  processing_status:
+                    type: string
+        '422':
+          description: Update failed with partial results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Failed to parse updated Expense Report"
+                  partial_results:
+                    type: boolean
+                  details:
+                    type: string
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+
+components:
+  schemas: {}

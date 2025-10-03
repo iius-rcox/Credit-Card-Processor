@@ -1,0 +1,114 @@
+openapi: 3.0.3
+info:
+  title: Upload PDFs Endpoint
+  description: Upload Credit Card Statement and Expense Report PDFs to create a new session
+  version: 1.0.0
+
+paths:
+  /api/upload:
+    post:
+      summary: Upload two PDF files
+      description: |
+        Uploads a Credit Card Statement PDF and an Expense Software Report PDF.
+        Creates a new session and returns the session ID for subsequent processing.
+      operationId: uploadPDFs
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - creditCardStatement
+                - expenseReport
+              properties:
+                creditCardStatement:
+                  type: string
+                  format: binary
+                  description: Credit Card Statement PDF file
+                expenseReport:
+                  type: string
+                  format: binary
+                  description: Expense Software Report PDF file
+      responses:
+        '201':
+          description: Session created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - session_id
+                  - uploaded_files
+                  - created_at
+                properties:
+                  session_id:
+                    type: string
+                    format: uuid
+                    example: "550e8400-e29b-41d4-a716-446655440000"
+                  uploaded_files:
+                    type: object
+                    required:
+                      - credit_card_statement
+                      - expense_report
+                    properties:
+                      credit_card_statement:
+                        type: object
+                        properties:
+                          filename:
+                            type: string
+                            example: "statement_sept_2025.pdf"
+                          size:
+                            type: integer
+                            example: 245678
+                      expense_report:
+                        type: object
+                        properties:
+                          filename:
+                            type: string
+                            example: "receipts_sept_2025.pdf"
+                          size:
+                            type: integer
+                            example: 123456
+                  created_at:
+                    type: string
+                    format: date-time
+                    example: "2025-10-03T14:30:00Z"
+        '400':
+          description: Bad request (invalid file format, missing files)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Both PDF files are required"
+                  details:
+                    type: string
+                    example: "expenseReport file is missing or not a PDF"
+        '413':
+          description: Payload too large (file size exceeds limit)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "File size exceeds 10MB limit"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Failed to process uploaded files"
+                  details:
+                    type: string
+
+components:
+  schemas: {}
