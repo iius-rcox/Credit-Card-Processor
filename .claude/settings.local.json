@@ -24,7 +24,20 @@
       "Bash(npm test)",
       "Bash(npm run:*)",
       "Bash(npm cache clean:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(sudo chown:*)",
+      "Bash(npx next@latest dev:*)",
+      "mcp__chrome-devtools:*",
+      "mcp__chrome-devtools__click",
+      "mcp__chrome-devtools__evaluate_script",
+      "mcp__chrome-devtools__upload_file",
+      "mcp__chrome-devtools__take_screenshot",
+      "Bash(npx next:*)",
+      "mcp__chrome-devtools__new_page",
+      "mcp__chrome-devtools__handle_dialog",
+      "Bash(gh repo view:*)"
     ],
     "deny": [],
     "ask": [
