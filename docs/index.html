@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Expense Reconciliation System</title>
+    <meta name="description" content="Upload credit card statements and expense reports for automated matching">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --radius: 0.625rem;
+            --background: oklch(1 0 0);
+            --foreground: oklch(0.145 0 0);
+            --card: oklch(1 0 0);
+            --card-foreground: oklch(0.145 0 0);
+            --popover: oklch(1 0 0);
+            --popover-foreground: oklch(0.145 0 0);
+            --primary: oklch(0.5 0.3 240);
+            --primary-foreground: oklch(0.985 0 0);
+            --secondary: oklch(0.97 0.1 240);
+            --secondary-foreground: oklch(0.145 0 0);
+            --muted: oklch(0.97 0.05 240);
+            --muted-foreground: oklch(0.556 0 0);
+            --accent: oklch(0.708 0.2 240);
+            --accent-foreground: oklch(0.985 0 0);
+            --destructive: oklch(0.577 0.245 27.325);
+            --border: oklch(0.922 0.05 240);
+            --input: oklch(0.922 0.05 240);
+            --ring: oklch(0.708 0.2 240);
+        }
+
+        .dark {
+            --background: oklch(0.145 0 0);
+            --foreground: oklch(0.985 0 0);
+            --card: oklch(0.205 0 0);
+            --card-foreground: oklch(0.985 0 0);
+            --popover: oklch(0.205 0 0);
+            --popover-foreground: oklch(0.985 0 0);
+            --primary: oklch(0.4 0.25 240);
+            --primary-foreground: oklch(0.985 0 0);
+            --secondary: oklch(0.269 0.05 240);
+            --secondary-foreground: oklch(0.985 0 0);
+            --muted: oklch(0.269 0.03 240);
+            --muted-foreground: oklch(0.708 0 0);
+            --accent: oklch(0.556 0.15 240);
+            --accent-foreground: oklch(0.985 0 0);
+            --destructive: oklch(0.704 0.191 22.216);
+            --border: oklch(1 0 0 / 10%);
+            --input: oklch(1 0 0 / 15%);
+            --ring: oklch(0.556 0.15 240);
+        }
+
+        body {
+            background-color: var(--background);
+            color: var(--foreground);
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        .btn {
+            padding: 0.5rem 1rem;
+            border-radius: calc(var(--radius) - 2px);
+            border: none;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            font-size: 0.875rem;
+            line-height: 1.25rem;
+            text-decoration: none;
+            white-space: nowrap;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-primary {
+            background-color: var(--primary);
+            color: var(--primary-foreground);
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            opacity: 0.9;
+        }
+
+        .btn-secondary {
+            background-color: var(--secondary);
+            color: var(--secondary-foreground);
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            opacity: 0.8;
+        }
+
+        .btn-outline {
+            background-color: transparent;
+            color: var(--foreground);
+            border: 1px solid var(--border);
+        }
+
+        .btn-outline:hover:not(:disabled) {
+            background-color: var(--accent);
+            color: var(--accent-foreground);
+        }
+
+        .card {
+            background-color: var(--card);
+            color: var(--card-foreground);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.5rem;
+            box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+            transition: all 0.3s ease;
+        }
+
+        .input {
+            background-color: var(--background);
+            color: var(--foreground);
+            border: 1px solid var(--input);
+            border-radius: calc(var(--radius) - 2px);
+            padding: 0.5rem 0.75rem;
+            width: 100%;
+            transition: all 0.2s ease;
+            font-size: 0.875rem;
+        }
+
+        .input:focus {
+            outline: 2px solid var(--ring);
+            outline-offset: 2px;
+            border-color: var(--ring);
+        }
+
+        .input::placeholder {
+            color: var(--muted-foreground);
+        }
+
+        .alert {
+            padding: 1rem;
+            border-radius: calc(var(--radius) - 2px);
+            border: 1px solid var(--border);
+            margin-bottom: 1rem;
+            font-size: 0.875rem;
+        }
+
+        .alert-success {
+            background-color: var(--accent);
+            color: var(--accent-foreground);
+            border-color: var(--accent);
+        }
+
+        .alert-destructive {
+            background-color: var(--destructive);
+            color: white;
+            border-color: var(--destructive);
+        }
+
+        .alert-info {
+            background-color: var(--muted);
+            color: var(--muted-foreground);
+            border-color: var(--border);
+        }
+
+        .progress {
+            background-color: var(--secondary);
+            border-radius: var(--radius);
+            height: 0.5rem;
+            overflow: hidden;
+            margin: 0.5rem 0;
+        }
+
+        .progress-bar {
+            background-color: var(--primary);
+            height: 100%;
+            transition: width 0.5s ease-in-out;
+            border-radius: var(--radius);
+        }
+
+        .oklch-support-warning {
+            background-color: var(--muted);
+            color: var(--muted-foreground);
+            padding: 0.75rem;
+            border-radius: calc(var(--radius) - 2px);
+            margin-bottom: 1rem;
+            border: 1px solid var(--border);
+            font-size: 0.875rem;
+        }
+
+        .step-hidden {
+            display: none !important;
+        }
+
+        .grid {
+            display: grid;
+        }
+
+        .grid-cols-1 {
+            grid-template-columns: repeat(1, minmax(0, 1fr));
+        }
+
+        .gap-4 {
+            gap: 1rem;
+        }
+
+        .gap-6 {
+            gap: 1.5rem;
+        }
+
+        .space-y-2 > * + * {
+            margin-top: 0.5rem;
+        }
+
+        .space-y-4 > * + * {
+            margin-top: 1rem;
+        }
+
+        .w-full {
+            width: 100%;
+        }
+
+        .text-center {
+            text-align: center;
+        }
+
+        .text-sm {
+            font-size: 0.875rem;
+            line-height: 1.25rem;
+        }
+
+        .font-medium {
+            font-weight: 500;
+        }
+
+        .font-semibold {
+            font-weight: 600;
+        }
+
+        .mb-2 {
+            margin-bottom: 0.5rem;
+        }
+
+        .mb-4 {
+            margin-bottom: 1rem;
+        }
+
+        .mb-8 {
+            margin-bottom: 2rem;
+        }
+
+        .mt-8 {
+            margin-top: 2rem;
+        }
+
+        @media (min-width: 768px) {
+            .md\\:grid-cols-2 {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .md\\:grid-cols-3 {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+        }
+
+        .animate-spin {
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            from {
+                transform: rotate(0deg);
+            }
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .loading-spinner {
+            width: 1.5rem;
+            height: 1.5rem;
+            border: 2px solid var(--muted);
+            border-top: 2px solid var(--primary);
+            border-radius: 50%;
+            margin: 0 auto 1rem;
+        }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-8">
+    <div class="max-w-4xl mx-auto">
+        <!-- Header -->
+        <header class="mb-8 text-center">
+            <h1 class="text-4xl font-bold mb-2">Expense Reconciliation System</h1>
+            <p style="color: var(--muted-foreground);">
+                Upload credit card statements and expense reports for automated matching
+            </p>
+        </header>
+
+        <!-- Browser Compatibility Check -->
+        <div id="oklch-warning" class="oklch-support-warning step-hidden">
+            ⚠️ Your browser doesn't support OKLCH colors. Colors may appear differently but functionality remains intact.
+        </div>
+
+        <!-- Theme Toggle -->
+        <div class="mb-8 text-center">
+            <button id="theme-toggle" class="btn btn-outline">
+                <span id="theme-text">🌙 Switch to Dark Mode</span>
+            </button>
+        </div>
+
+        <!-- Loading State -->
+        <div id="loading-step" class="card text-center step-hidden">
+            <div class="loading-spinner animate-spin"></div>
+            <h2 class="text-xl font-semibold mb-2">Initializing Application</h2>
+            <p style="color: var(--muted-foreground);">Please wait while we prepare the system...</p>
+        </div>
+
+        <!-- Step 1: Upload Form -->
+        <div id="upload-step" class="card mb-8">
+            <h2 class="text-2xl font-semibold mb-4">📁 Step 1: Upload Files</h2>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium mb-2">Credit Card Statement (PDF)</label>
+                    <input type="file" accept=".pdf" class="input" id="cc-statement">
+                    <p class="text-sm mt-1" style="color: var(--muted-foreground);">Upload your credit card statement in PDF format</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-2">Expense Report (PDF)</label>
+                    <input type="file" accept=".pdf" class="input" id="expense-report">
+                    <p class="text-sm mt-1" style="color: var(--muted-foreground);">Upload your expense report in PDF format</p>
+                </div>
+                <button id="upload-btn" class="btn btn-primary w-full" onclick="startProcessing()" disabled>
+                    🚀 Start Processing
+                </button>
+                <div id="upload-error" class="alert alert-destructive step-hidden">
+                    Please select both files before processing.
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 2: Progress Display -->
+        <div id="progress-step" class="card mb-8 step-hidden">
+            <h2 class="text-2xl font-semibold mb-4">⚙️ Step 2: Processing</h2>
+            <div class="space-y-4">
+                <div>
+                    <div class="flex justify-between text-sm mb-2">
+                        <span id="progress-text">Extracting text from documents...</span>
+                        <span id="progress-percent">0%</span>
+                    </div>
+                    <div class="progress">
+                        <div id="progress-bar" class="progress-bar" style="width: 0%"></div>
+                    </div>
+                </div>
+                <div id="progress-details" style="color: var(--muted-foreground); font-size: 0.875rem;">
+                    <div>• Uploading files...</div>
+                    <div>• Extracting credit card transactions...</div>
+                    <div>• Processing expense items...</div>
+                    <div>• Matching transactions to expenses...</div>
+                    <div>• Generating reports...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 3: Results Panel -->
+        <div id="results-step" class="card step-hidden">
+            <h2 class="text-2xl font-semibold mb-4">📊 Step 3: Results</h2>
+            <div class="space-y-4">
+                <div class="alert alert-success">
+                    ✅ Processing completed! Found <span id="total-transactions">15</span> transactions and matched <span id="matched-expenses">12</span> expenses.
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="card" style="background-color: var(--muted);">
+                        <h3 class="font-semibold mb-2">📈 Summary</h3>
+                        <div style="color: var(--muted-foreground); font-size: 0.875rem;" class="space-y-1">
+                            <div>Total Transactions: <span id="summary-transactions">15</span></div>
+                            <div>Matched Expenses: <span id="summary-matched">12</span></div>
+                            <div>Unmatched: <span id="summary-unmatched">3</span></div>
+                            <div>Match Rate: <span id="summary-rate">80%</span></div>
+                        </div>
+                    </div>
+
+                    <div class="card" style="background-color: var(--muted);">
+                        <h3 class="font-semibold mb-2">📥 Export Options</h3>
+                        <div class="space-y-2">
+                            <button class="btn btn-secondary w-full" onclick="downloadExcel()">
+                                📊 Download Excel Report
+                            </button>
+                            <button class="btn btn-secondary w-full" onclick="downloadCSV()">
+                                📄 Download CSV Export
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="text-center mt-8">
+                    <button class="btn btn-outline" onclick="startNew()">
+                        🔄 Start New Session
+                    </button>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- Footer -->
+        <footer class="mt-8 text-center text-sm" style="color: var(--muted-foreground);">
+            <p>Built with shadcn/ui blue theme • OKLCH color format • Responsive design</p>
+        </footer>
+    </div>
+
+    <script>
+        // Application State
+        let appState = {
+            currentStep: 'upload',
+            isDark: false,
+            processing: false,
+            sessionData: null
+        };
+
+        // Check OKLCH support
+        function checkOKLCHSupport() {
+            try {
+                const oklchSupported = CSS.supports('color', 'oklch(0.5 0.2 180)');
+                const warningElement = document.getElementById('oklch-warning');
+
+                if (!oklchSupported) {
+                    warningElement.classList.remove('step-hidden');
+                    console.warn('OKLCH colors not supported in this browser');
+                }
+
+                return oklchSupported;
+            } catch (e) {
+                console.warn('Could not check OKLCH support:', e);
+                return false;
+            }
+        }
+
+        // Theme toggle functionality
+        function initThemeToggle() {
+            const themeToggle = document.getElementById('theme-toggle');
+            const themeText = document.getElementById('theme-text');
+
+            // Check for saved theme preference or default to light
+            const savedTheme = localStorage.getItem('theme');
+            if (savedTheme === 'dark') {
+                toggleDarkMode(true);
+            }
+
+            themeToggle.addEventListener('click', () => {
+                toggleDarkMode(!appState.isDark);
+            });
+
+            function toggleDarkMode(isDark) {
+                appState.isDark = isDark;
+                document.documentElement.classList.toggle('dark', isDark);
+                themeText.textContent = isDark ? '☀️ Switch to Light Mode' : '🌙 Switch to Dark Mode';
+                localStorage.setItem('theme', isDark ? 'dark' : 'light');
+            }
+        }
+
+        // File validation
+        function validateFiles() {
+            const ccFile = document.getElementById('cc-statement').files[0];
+            const expenseFile = document.getElementById('expense-report').files[0];
+            const uploadBtn = document.getElementById('upload-btn');
+            const errorDiv = document.getElementById('upload-error');
+
+            const isValid = ccFile && expenseFile;
+            uploadBtn.disabled = !isValid;
+
+            if (isValid) {
+                errorDiv.classList.add('step-hidden');
+            }
+
+            return isValid;
+        }
+
+        // Show/hide steps
+        function showStep(stepName) {
+            const steps = ['upload', 'progress', 'results', 'loading'];
+            steps.forEach(step => {
+                const element = document.getElementById(step + '-step');
+                if (element) {
+                    element.classList.toggle('step-hidden', step !== stepName);
+                }
+            });
+            appState.currentStep = stepName;
+        }
+
+        // Simulate processing workflow
+        function startProcessing() {
+            if (!validateFiles()) {
+                const errorDiv = document.getElementById('upload-error');
+                errorDiv.classList.remove('step-hidden');
+                return;
+            }
+
+            appState.processing = true;
+            showStep('progress');
+
+            // Simulate progress
+            let progress = 0;
+            const progressBar = document.getElementById('progress-bar');
+            const progressPercent = document.getElementById('progress-percent');
+            const progressText = document.getElementById('progress-text');
+
+            const steps = [
+                'Uploading files...',
+                'Extracting text from documents...',
+                'Parsing credit card transactions...',
+                'Processing expense items...',
+                'Matching transactions to expenses...',
+                'Generating reports...'
+            ];
+
+            let stepIndex = 0;
+            const interval = setInterval(() => {
+                progress += Math.random() * 20 + 10; // Variable progress increment
+
+                if (progress > 100) {
+                    progress = 100;
+                    clearInterval(interval);
+                    setTimeout(() => {
+                        showResults();
+                        appState.processing = false;
+                    }, 1000);
+                }
+
+                progressBar.style.width = progress + '%';
+                progressPercent.textContent = Math.round(progress) + '%';
+
+                if (stepIndex < steps.length && progress > (stepIndex + 1) * 16) {
+                    stepIndex++;
+                    if (stepIndex < steps.length) {
+                        progressText.textContent = steps[stepIndex];
+                    }
+                }
+            }, 800);
+        }
+
+        function showResults() {
+            // Generate random but realistic results
+            const totalTransactions = Math.floor(Math.random() * 20) + 10;
+            const matchedExpenses = Math.floor(totalTransactions * (0.7 + Math.random() * 0.2));
+            const unmatched = totalTransactions - matchedExpenses;
+            const matchRate = Math.round((matchedExpenses / totalTransactions) * 100);
+
+            // Update result displays
+            document.getElementById('total-transactions').textContent = totalTransactions;
+            document.getElementById('matched-expenses').textContent = matchedExpenses;
+            document.getElementById('summary-transactions').textContent = totalTransactions;
+            document.getElementById('summary-matched').textContent = matchedExpenses;
+            document.getElementById('summary-unmatched').textContent = unmatched;
+            document.getElementById('summary-rate').textContent = matchRate + '%';
+
+            appState.sessionData = {
+                totalTransactions,
+                matchedExpenses,
+                unmatched,
+                matchRate
+            };
+
+            showStep('results');
+        }
+
+        function downloadExcel() {
+            // Simulate Excel download
+            const blob = new Blob(['Mock Excel Report Data'], { type: 'application/vnd.ms-excel' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'expense-reconciliation-report.xlsx';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function downloadCSV() {
+            // Generate mock CSV data
+            const csvData = [
+                'Date,Transaction,Amount,Matched Expense,Status',
+                '2024-01-15,Restaurant ABC,$45.67,Meal Expense,$45.67,Matched',
+                '2024-01-16,Gas Station XYZ,$52.34,Fuel Expense,$52.34,Matched',
+                '2024-01-17,Office Supplies,$23.45,,Unmatched'
+            ].join('\\n');
+
+            const blob = new Blob([csvData], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'expense-reconciliation-export.csv';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function startNew() {
+            // Reset application state
+            appState = {
+                currentStep: 'upload',
+                isDark: appState.isDark, // Preserve theme
+                processing: false,
+                sessionData: null
+            };
+
+            // Clear form inputs
+            document.getElementById('cc-statement').value = '';
+            document.getElementById('expense-report').value = '';
+            document.getElementById('upload-btn').disabled = true;
+            document.getElementById('upload-error').classList.add('step-hidden');
+
+            // Reset progress
+            document.getElementById('progress-bar').style.width = '0%';
+            document.getElementById('progress-percent').textContent = '0%';
+            document.getElementById('progress-text').textContent = 'Uploading files...';
+
+            showStep('upload');
+        }
+
+        // File input change handlers
+        function setupFileHandlers() {
+            document.getElementById('cc-statement').addEventListener('change', validateFiles);
+            document.getElementById('expense-report').addEventListener('change', validateFiles);
+        }
+
+        // Initialize application
+        document.addEventListener('DOMContentLoaded', () => {
+            checkOKLCHSupport();
+            initThemeToggle();
+            setupFileHandlers();
+
+            // Show initial step
+            showStep('upload');
+
+            console.log('Expense Reconciliation System initialized');
+        });
+
+        // Error handling
+        window.addEventListener('error', (e) => {
+            console.error('Application error:', e.error);
+        });
+
+        // Performance monitoring
+        if ('performance' in window) {
+            window.addEventListener('load', () => {
+                const loadTime = performance.now();
+                console.log(`Application loaded in ${loadTime.toFixed(2)}ms`);
+            });
+        }
+    </script>
+</body>
+</html>

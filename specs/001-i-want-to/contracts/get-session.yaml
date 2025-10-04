@@ -33,6 +33,7 @@ paths:
                   - updated_at
                   - processing_status
                   - employees
+                  - matching_results
                 properties:
                   session_id:
                     type: string
@@ -74,6 +75,14 @@ paths:
                           type: array
                           items:
                             type: object
+                            required:
+                              - transaction_id
+                              - transaction_date
+                              - transaction_amount
+                              - transaction_name
+                              - has_receipt
+                              - has_gl_code
+                              - status
                             properties:
                               transaction_id:
                                 type: string
@@ -97,8 +106,14 @@ paths:
                           type: array
                           items:
                             type: object
+                            required:
+                              - receipt_id
+                              - employee_id
+                              - amount
                             properties:
                               receipt_id:
+                                type: string
+                              employee_id:
                                 type: string
                               amount:
                                 type: number
@@ -109,6 +124,26 @@ paths:
                               project_code:
                                 type: string
                                 nullable: true
+                  matching_results:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - expense_transaction_id
+                        - match_reason
+                        - has_gl_code
+                      properties:
+                        expense_transaction_id:
+                          type: string
+                          format: uuid
+                        matched_receipt_id:
+                          type: string
+                          nullable: true
+                        match_reason:
+                          type: string
+                          enum: [exact_match, no_receipt_found, multiple_matches]
+                        has_gl_code:
+                          type: boolean
         '404':
           description: Session not found
           content:

@@ -1,0 +1,18 @@
+# Core FastAPI dependencies
+fastapi==0.115.6
+uvicorn==0.34.0
+pydantic==2.10.5
+python-multipart==0.0.20
+
+# PDF processing
+pdfplumber==0.11.5
+
+# Data processing and file generation
+pandas==2.2.3
+openpyxl==3.1.5
+
+# Testing
+pytest==8.3.4
+pytest-cov==6.0.0
+pytest-asyncio==0.25.2
+httpx==0.28.1

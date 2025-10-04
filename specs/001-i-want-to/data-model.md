@@ -77,7 +77,7 @@ Represents a single credit card charge from the Credit Card Statement PDF.
 | tax | decimal | No | Positive, 2 decimals | Tax amount |
 | pay_type | string | No | - | Payment type |
 | has_receipt | boolean | Yes | Computed field | True if matching receipt exists |
-| has_gl_code | boolean | Yes | Computed field | True if gl_account OR project_code exists |
+| has_gl_code | boolean | Yes | Computed field | True if `gl_account` is present OR a matched `ReceiptRecord` has `gl_code` or `project_code` |
 | status | enum | Yes | Computed field | "Missing Receipt" \| "Missing GL Code" \| "Missing Both" \| "Complete" |
 
 **Validation Rules:**
@@ -94,7 +94,7 @@ Represents a single credit card charge from the Credit Card Statement PDF.
 
 **Computed Fields:**
 - `has_receipt`: Set to `true` if a `ReceiptRecord` exists with matching `employee_id` and `amount`
-- `has_gl_code`: Set to `true` if `gl_account` is not null/empty
+- `has_gl_code`: Set to `true` if `gl_account` is not null/empty OR if a matched `ReceiptRecord` exists where `gl_code` or `project_code` is present
 - `status`: Derived from `has_receipt` and `has_gl_code` using logic above
 
 **Relationships:**

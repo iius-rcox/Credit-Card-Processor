@@ -2,9 +2,46 @@
   "permissions": {
     "allow": [
       "Bash(powershell.exe:*)",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "Bash(npx create-next-app:*)",
+      "Bash(npx shadcn@latest init:*)",
+      "Bash(npx shadcn@latest add:*)",
+      "Bash(touch:*)",
+      "Bash(tree:*)",
+      "mcp__chrome-devtools__list_pages",
+      "Bash(npm run dev:*)",
+      "mcp__chrome-devtools__navigate_page",
+      "mcp__chrome-devtools__take_snapshot",
+      "Bash(mv:*)",
+      "mcp__chrome-devtools:*",
+      "Bash(.specify/scripts/powershell/setup-plan.ps1 -Json)",
+      "Bash(.specify/scripts/bash/setup-plan.sh:*)",
+      "WebSearch",
+      "Bash(.specify/scripts/bash/update-agent-context.sh:*)",
+      "Bash(.specify/scripts/bash/check-prerequisites.sh:*)",
+      "Bash(npm install:*)",
+      "Bash(npx storybook@latest init:*)",
+      "Bash(npm test)",
+      "Bash(npm run:*)",
+      "Bash(npm cache clean:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(sudo chown:*)",
+      "Bash(npx next@latest dev:*)",
+      "mcp__chrome-devtools:*",
+      "mcp__chrome-devtools__click",
+      "mcp__chrome-devtools__evaluate_script",
+      "mcp__chrome-devtools__upload_file",
+      "mcp__chrome-devtools__take_screenshot",
+      "Bash(npx next:*)",
+      "mcp__chrome-devtools__new_page",
+      "mcp__chrome-devtools__handle_dialog",
+      "Bash(gh repo view:*)"
     ],
     "deny": [],
-    "ask": []
+    "ask": [
+      "Bash(taskkill:*)"
+    ]
   }
 }
