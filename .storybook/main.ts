@@ -1,67 +1,23 @@
-import type { StorybookConfig } from '@storybook/nextjs';
+import type { StorybookConfig } from "@storybook/nextjs-vite";
 
 const config: StorybookConfig = {
-  stories: [
-    '../stories/**/*.stories.@(js|jsx|ts|tsx|mdx)',
-    '../components/**/*.stories.@(js|jsx|ts|tsx|mdx)',
+  "stories": [
+    "../stories/**/*.mdx",
+    "../stories/**/*.stories.@(js|jsx|mjs|ts|tsx)"
   ],
-  addons: [
-    '@storybook/addon-essentials',
-    '@storybook/addon-themes',
-    '@storybook/addon-docs',
-    '@storybook/addon-controls',
-    '@storybook/addon-viewport',
+  "addons": [
+    "@chromatic-com/storybook",
+    "@storybook/addon-docs",
+    "@storybook/addon-onboarding",
+    "@storybook/addon-a11y",
+    "@storybook/addon-vitest"
   ],
-  framework: {
-    name: '@storybook/nextjs',
-    options: {
-      builder: {
-        useSWC: true,
-      },
-    },
+  "framework": {
+    "name": "@storybook/nextjs-vite",
+    "options": {}
   },
-  core: {
-    disableTelemetry: true,
-  },
-  typescript: {
-    check: false,
-    reactDocgen: 'react-docgen-typescript',
-    reactDocgenTypescriptOptions: {
-      shouldExtractLiteralValuesFromEnum: true,
-      propFilter: (prop) => (prop.parent ? !/node_modules/.test(prop.parent.fileName) : true),
-    },
-  },
-  nextConfigPath: '../next.config.js',
-  features: {
-    experimentalRSC: false, // Disable RSC for Storybook compatibility
-  },
-  staticDirs: ['../public'],
-  webpackFinal: async (config) => {
-    // Ensure proper handling of CSS imports
-    const fileLoaderRule = config.module?.rules?.find((rule) => {
-      if (typeof rule !== 'object' || !rule) return false;
-      if ('test' in rule && rule.test instanceof RegExp) {
-        return rule.test.test('.svg');
-      }
-      return false;
-    });
-
-    if (fileLoaderRule && typeof fileLoaderRule === 'object' && 'exclude' in fileLoaderRule) {
-      if (Array.isArray(fileLoaderRule.exclude)) {
-        fileLoaderRule.exclude.push(/\.svg$/);
-      } else {
-        fileLoaderRule.exclude = [fileLoaderRule.exclude, /\.svg$/];
-      }
-    }
-
-    // Add SVG support
-    config.module?.rules?.push({
-      test: /\.svg$/,
-      use: ['@svgr/webpack'],
-    });
-
-    return config;
-  },
+  "staticDirs": [
+    "../public"
+  ]
 };
-
 export default config;

@@ -290,6 +290,11 @@ export function isSessionNameUnique(storage: SessionStorage, name: string, exclu
  */
 export function loadSessionStorage(): SessionStorage {
   try {
+    // Check if localStorage is available (client-side only)
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+      return DEFAULT_SESSION_STORAGE;
+    }
+
     const stored = localStorage.getItem(SESSION_CONSTRAINTS.STORAGE_KEY);
     if (!stored) {
       return DEFAULT_SESSION_STORAGE;
@@ -316,6 +321,11 @@ export function loadSessionStorage(): SessionStorage {
  */
 export function saveSessionStorage(storage: SessionStorage): boolean {
   try {
+    // Check if localStorage is available (client-side only)
+    if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+      return false;
+    }
+
     const serialized = JSON.stringify(storage);
     localStorage.setItem(SESSION_CONSTRAINTS.STORAGE_KEY, serialized);
     return true;

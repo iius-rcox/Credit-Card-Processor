@@ -40,7 +40,13 @@
       "Bash(gh repo view:*)",
       "Bash(git rm:*)",
       "Bash(.specify/scripts/bash/create-new-feature.sh:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "SlashCommand(/specify change the dark mode selector to be less obnoxious.  Just an icon in the top right of the page should work.)",
+      "mcp__ide__executeCode",
+      "mcp__chrome-devtools__hover",
+      "mcp__chrome-devtools__wait_for",
+      "mcp__chrome-devtools__resize_page",
+      "mcp__chrome-devtools__list_console_messages"
     ],
     "deny": [],
     "ask": [

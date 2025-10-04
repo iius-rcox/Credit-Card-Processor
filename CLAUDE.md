@@ -1,8 +1,8 @@
 # Claude Code Project Context
 
 **Project**: Expense Reconciliation System
-**Generated**: 2025-10-03
-**Active Feature**: 002-replace-all-front (Replace Front-End UI with shadcn/ui Blue Theme)
+**Generated**: 2025-10-04
+**Active Feature**: 004-change-the-dark (Simplify Dark Mode Toggle to Icon)
 
 ## Tech Stack
 
@@ -40,72 +40,69 @@ components/
 │   ├── label.tsx
 │   ├── alert.tsx
 │   ├── progress.tsx
-│   └── form.tsx
+│   ├── form.tsx
+│   └── tooltip.tsx   # Radix UI tooltip (add if missing)
 ├── upload-form.tsx   # Upload workflow
 ├── progress-display.tsx
-└── results-panel.tsx
+├── results-panel.tsx
+└── theme-toggle.tsx  # NEW - Dark mode toggle icon component
 
 lib/
 ├── utils.ts          # Tailwind utilities
-└── theme-detection.ts # OKLCH browser support
+├── theme-detection.ts # OKLCH + system preference detection
+└── theme-storage.ts  # NEW - Storage abstraction layer
 
 .storybook/           # Component stories
 └── stories/
 ```
 
-## Current Feature: Blue Theme Migration
+## Current Feature: Dark Mode Toggle Icon
 
 ### Objective
-Migrate all front-end UI components to shadcn/ui with blue color theme while preserving all existing functionality.
+Replace the prominent centered dark mode button with a subtle icon in the top-right corner, adding system preference detection and improved accessibility.
 
 ### Key Requirements
-1. Apply blue theme using OKLCH color format
-2. Support light and dark modes
-3. Preserve all existing component functionality
-4. Implement browser compatibility detection
-5. Create component storybook for validation
-6. No specific performance target (minimize impact)
-7. Visual contrast verified through review (no WCAG compliance required)
+1. Icon positioned in top-right corner (fixed positioning)
+2. Less visually prominent than current centered button
+3. Detect and apply OS dark mode preference on first visit
+4. Manual selection overrides system preference
+5. Tooltip on hover with visual feedback
+6. Responsive sizing (larger on mobile/touch devices)
+7. Graceful degradation when localStorage blocked
+8. Match existing app accessibility standards
+9. Remove old centered button from `index.html`
 
-### Component Migration Map
-- Button → @/components/ui/button
-- Card → @/components/ui/card
-- Input → @/components/ui/input
-- Label → @/components/ui/label
-- Alert → @/components/ui/alert
-- Progress → @/components/ui/progress
-- Form → @/components/ui/form
+### Implementation Details
+- **Component**: `components/theme-toggle.tsx` (new)
+- **Icons**: lucide-react `Moon` and `Sun` icons
+- **Tooltip**: Radix UI tooltip component (shadcn/ui)
+- **Storage**: `lib/theme-storage.ts` - localStorage → sessionStorage fallback
+- **Detection**: `lib/theme-detection.ts` - Extended with `matchMedia` for system preference
+- **Integration**: `app/layout.tsx` - Fixed top-right positioning
+- **Removal**: `index.html` lines 306-310 (old button) and lines 439-460 (theme JS)
 
-### Theme Configuration
-Blue base color configured in `components.json`:
-```json
-{
-  "tailwind": {
-    "baseColor": "blue",
-    "cssVariables": true
-  }
-}
-```
-
-OKLCH CSS variables defined in `app/globals.css`:
-- Primary: Blue brand color for CTAs
-- Secondary: Neutral grays
-- Accent: Blue highlights
-- Destructive: Red for errors
-- Muted: Low saturation backgrounds
+### Technical Approach
+- System preference detection: `window.matchMedia('(prefers-color-scheme: dark)')`
+- Priority logic: Manual > System > Default (light)
+- Storage keys: `theme` ('light'|'dark'), `theme-source` ('system'|'manual')
+- SSR-safe: Theme detection in `useEffect`, not during render
+- Performance: <50ms theme switch, no FOUC
 
 ### Browser Compatibility
-- Detect OKLCH support: `CSS.supports('color', 'oklch(0.5 0.2 180)')`
-- Display warning if unsupported
-- Allow degraded color rendering
-- Continue full functionality
+- lucide-react icons: All modern browsers
+- matchMedia API: Chrome 76+, Safari 14+, Firefox 67+, Edge 79+
+- Radix UI tooltip: Universal support
+- OKLCH colors: Existing compatibility warning handles fallback
 
 ## Recent Changes
+- 004-change-the-dark: Dark mode toggle icon implementation (planning phase)
 - 003-add-ui-components: Added TypeScript 5.x with React 19 + Next.js 15.5.4, shadcn/ui, Radix UI, Tailwind CSS 4.x
-- 002-replace-all-front: Added TypeScript 5.x + React 19, Next.js 15.5.4, shadcn/ui, Tailwind CSS 4.x, Radix UI
+- 002-replace-all-front: Blue theme migration completed
 
-### 2025-10-03: Feature 002 Planning
-- Created implementation plan with 5 phases
+### 2025-10-04: Feature 004 Planning
+- Created specification with 5 clarification questions
+- Generated implementation plan with research, contracts, and quickstart guide
+- Ready for task generation phase
 
 ## Development Guidelines
 

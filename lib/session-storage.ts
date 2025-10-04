@@ -189,6 +189,10 @@ export function getActiveSessions(storage: SessionStorage): MonthSession[] {
  * Get session by ID if it exists and is not expired
  */
 export function getSessionById(storage: SessionStorage, id: string): MonthSession | null {
+  if (!storage || !storage.sessions) {
+    return null;
+  }
+
   const session = storage.sessions[id];
 
   if (!session || isSessionExpired(session)) {
@@ -202,7 +206,7 @@ export function getSessionById(storage: SessionStorage, id: string): MonthSessio
  * Get currently active session
  */
 export function getActiveSession(storage: SessionStorage): MonthSession | null {
-  if (!storage.activeSessionId) {
+  if (!storage || !storage.activeSessionId) {
     return null;
   }
 
@@ -264,6 +268,34 @@ export function createNewSession(
     storage: updatedStorage,
     sessionId: newSessionId,
   };
+}
+
+/**
+ * Clear the current active session
+ */
+export function clearSession(): void {
+  const storage = loadSessionStorage();
+  if (storage.activeSessionId) {
+    const updatedStorage = sessionStorageReducer(storage, {
+      type: 'DELETE_SESSION',
+      payload: { id: storage.activeSessionId },
+    });
+    persistSessionStorage(updatedStorage);
+  }
+}
+
+/**
+ * Get session from storage (alias for getActiveSession)
+ */
+export function getSession(storage: SessionStorage): MonthSession | null {
+  return getActiveSession(storage);
+}
+
+/**
+ * Save session to storage (alias for persistSessionStorage)
+ */
+export function saveSession(storage: SessionStorage): boolean {
+  return persistSessionStorage(storage);
 }
 
 /**

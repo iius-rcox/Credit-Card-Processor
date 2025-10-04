@@ -19,6 +19,7 @@ import { getSession, getReports } from "@/lib/api-client";
 import type { SessionResponse, ReportsResponse } from "@/lib/types";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 type AppStep = "upload" | "processing" | "results";
 
@@ -158,7 +159,7 @@ export default function Home() {
                   Expense Reconciliation System
                 </h1>
               </div>
-              <nav className="flex space-x-4">
+              <nav className="flex items-center space-x-4">
                 <a
                   href="/"
                   className="bg-blue-100 text-blue-700 px-3 py-2 rounded-md text-sm font-medium"
@@ -171,6 +172,7 @@ export default function Home() {
                 >
                   Session Management
                 </a>
+                <ThemeToggle />
               </nav>
             </div>
           </div>
