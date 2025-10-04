@@ -37,7 +37,10 @@
       "Bash(npx next:*)",
       "mcp__chrome-devtools__new_page",
       "mcp__chrome-devtools__handle_dialog",
-      "Bash(gh repo view:*)"
+      "Bash(gh repo view:*)",
+      "Bash(git rm:*)",
+      "Bash(.specify/scripts/bash/create-new-feature.sh:*)",
+      "Bash(npx tsc:*)"
     ],
     "deny": [],
     "ask": [

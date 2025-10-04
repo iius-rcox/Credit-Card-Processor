@@ -101,11 +101,11 @@ OKLCH CSS variables defined in `app/globals.css`:
 - Continue full functionality
 
 ## Recent Changes
+- 003-add-ui-components: Added TypeScript 5.x with React 19 + Next.js 15.5.4, shadcn/ui, Radix UI, Tailwind CSS 4.x
 - 002-replace-all-front: Added TypeScript 5.x + React 19, Next.js 15.5.4, shadcn/ui, Tailwind CSS 4.x, Radix UI
 
 ### 2025-10-03: Feature 002 Planning
 - Created implementation plan with 5 phases
-- Defined theme configuration entity
 
 ## Development Guidelines
 
