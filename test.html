@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Credit Card Processor - UI Test</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --radius: 0.625rem;
+            --background: oklch(1 0 0);
+            --foreground: oklch(0.145 0 0);
+            --card: oklch(1 0 0);
+            --card-foreground: oklch(0.145 0 0);
+            --popover: oklch(1 0 0);
+            --popover-foreground: oklch(0.145 0 0);
+            --primary: oklch(0.5 0.3 240);
+            --primary-foreground: oklch(0.985 0 0);
+            --secondary: oklch(0.97 0.1 240);
+            --secondary-foreground: oklch(0.145 0 0);
+            --muted: oklch(0.97 0.05 240);
+            --muted-foreground: oklch(0.556 0 0);
+            --accent: oklch(0.708 0.2 240);
+            --accent-foreground: oklch(0.985 0 0);
+            --destructive: oklch(0.577 0.245 27.325);
+            --border: oklch(0.922 0.05 240);
+            --input: oklch(0.922 0.05 240);
+            --ring: oklch(0.708 0.2 240);
+        }
+
+        .dark {
+            --background: oklch(0.145 0 0);
+            --foreground: oklch(0.985 0 0);
+            --card: oklch(0.205 0 0);
+            --card-foreground: oklch(0.985 0 0);
+            --popover: oklch(0.205 0 0);
+            --popover-foreground: oklch(0.985 0 0);
+            --primary: oklch(0.4 0.25 240);
+            --primary-foreground: oklch(0.985 0 0);
+            --secondary: oklch(0.269 0.05 240);
+            --secondary-foreground: oklch(0.985 0 0);
+            --muted: oklch(0.269 0.03 240);
+            --muted-foreground: oklch(0.708 0 0);
+            --accent: oklch(0.556 0.15 240);
+            --accent-foreground: oklch(0.985 0 0);
+            --destructive: oklch(0.704 0.191 22.216);
+            --border: oklch(1 0 0 / 10%);
+            --input: oklch(1 0 0 / 15%);
+            --ring: oklch(0.556 0.15 240);
+        }
+
+        body {
+            background-color: var(--background);
+            color: var(--foreground);
+        }
+
+        .btn-primary {
+            background-color: var(--primary);
+            color: var(--primary-foreground);
+            padding: 0.5rem 1rem;
+            border-radius: calc(var(--radius) - 2px);
+            border: none;
+            font-weight: 500;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+
+        .btn-primary:hover {
+            background-color: var(--primary);
+            opacity: 0.9;
+        }
+
+        .btn-secondary {
+            background-color: var(--secondary);
+            color: var(--secondary-foreground);
+            padding: 0.5rem 1rem;
+            border-radius: calc(var(--radius) - 2px);
+            border: none;
+            font-weight: 500;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+
+        .btn-outline {
+            background-color: transparent;
+            color: var(--foreground);
+            padding: 0.5rem 1rem;
+            border-radius: calc(var(--radius) - 2px);
+            border: 1px solid var(--border);
+            font-weight: 500;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+
+        .btn-outline:hover {
+            background-color: var(--accent);
+            color: var(--accent-foreground);
+        }
+
+        .card {
+            background-color: var(--card);
+            color: var(--card-foreground);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 1.5rem;
+            box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+        }
+
+        .input {
+            background-color: var(--background);
+            color: var(--foreground);
+            border: 1px solid var(--input);
+            border-radius: calc(var(--radius) - 2px);
+            padding: 0.5rem 0.75rem;
+            width: 100%;
+            transition: all 0.2s;
+        }
+
+        .input:focus {
+            outline: 2px solid var(--ring);
+            outline-offset: 2px;
+            border-color: var(--ring);
+        }
+
+        .alert {
+            padding: 1rem;
+            border-radius: calc(var(--radius) - 2px);
+            border: 1px solid var(--border);
+            margin-bottom: 1rem;
+        }
+
+        .alert-destructive {
+            background-color: var(--destructive);
+            color: white;
+            border-color: var(--destructive);
+        }
+
+        .progress {
+            background-color: var(--secondary);
+            border-radius: var(--radius);
+            height: 0.5rem;
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            background-color: var(--primary);
+            height: 100%;
+            transition: width 0.5s ease-in-out;
+        }
+
+        .oklch-support-warning {
+            background-color: var(--muted);
+            color: var(--muted-foreground);
+            padding: 0.75rem;
+            border-radius: calc(var(--radius) - 2px);
+            margin-bottom: 1rem;
+            border: 1px solid var(--border);
+        }
+    </style>
+</head>
+<body class="min-h-screen p-8">
+    <div class="max-w-4xl mx-auto">
+        <!-- Header -->
+        <header class="mb-8 text-center">
+            <h1 class="text-4xl font-bold mb-2">Expense Reconciliation System</h1>
+            <p style="color: var(--muted-foreground);">
+                Upload credit card statements and expense reports for automated matching
+            </p>
+        </header>
+
+        <!-- Browser Compatibility Check -->
+        <div id="oklch-warning" class="oklch-support-warning" style="display: none;">
+            ⚠️ Your browser doesn't support OKLCH colors. Colors may appear differently but functionality remains intact.
+        </div>
+
+        <!-- Theme Toggle -->
+        <div class="mb-8 text-center">
+            <button id="theme-toggle" class="btn-outline">
+                <span id="theme-text">Switch to Dark Mode</span>
+            </button>
+        </div>
+
+        <!-- Step 1: Upload Form -->
+        <div id="upload-step" class="card mb-8">
+            <h2 class="text-2xl font-semibold mb-4">Step 1: Upload Files</h2>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium mb-2">Credit Card Statement (PDF)</label>
+                    <input type="file" accept=".pdf" class="input" id="cc-statement">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-2">Expense Report (PDF)</label>
+                    <input type="file" accept=".pdf" class="input" id="expense-report">
+                </div>
+                <button id="upload-btn" class="btn-primary" onclick="startProcessing()">
+                    Start Processing
+                </button>
+            </div>
+        </div>
+
+        <!-- Step 2: Progress Display -->
+        <div id="progress-step" class="card mb-8" style="display: none;">
+            <h2 class="text-2xl font-semibold mb-4">Step 2: Processing</h2>
+            <div class="space-y-4">
+                <div>
+                    <div class="flex justify-between text-sm mb-2">
+                        <span id="progress-text">Extracting text from documents...</span>
+                        <span id="progress-percent">25%</span>
+                    </div>
+                    <div class="progress">
+                        <div id="progress-bar" class="progress-bar" style="width: 25%"></div>
+                    </div>
+                </div>
+                <div id="progress-details" style="color: var(--muted-foreground); font-size: 0.875rem;">
+                    <div>• Uploading files...</div>
+                    <div>• Extracting credit card transactions...</div>
+                    <div>• Processing expense items...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 3: Results Panel -->
+        <div id="results-step" class="card" style="display: none;">
+            <h2 class="text-2xl font-semibold mb-4">Step 3: Results</h2>
+            <div class="space-y-4">
+                <div class="alert" style="background-color: var(--accent); color: var(--accent-foreground);">
+                    ✅ Processing completed! Found 15 transactions and matched 12 expenses.
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="card" style="background-color: var(--muted);">
+                        <h3 class="font-semibold mb-2">Summary</h3>
+                        <div style="color: var(--muted-foreground); font-size: 0.875rem;">
+                            <div>Total Transactions: 15</div>
+                            <div>Matched Expenses: 12</div>
+                            <div>Unmatched: 3</div>
+                            <div>Match Rate: 80%</div>
+                        </div>
+                    </div>
+
+                    <div class="card" style="background-color: var(--muted);">
+                        <h3 class="font-semibold mb-2">Export Options</h3>
+                        <div class="space-y-2">
+                            <button class="btn-secondary w-full">Download Excel Report</button>
+                            <button class="btn-secondary w-full">Download CSV Export</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="text-center">
+                    <button class="btn-outline" onclick="startNew()">Start New Session</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- shadcn/ui Component Testing -->
+        <div class="card mt-8">
+            <h2 class="text-2xl font-semibold mb-4">UI Component Testing</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+                <!-- Buttons -->
+                <div>
+                    <h3 class="font-semibold mb-3">Buttons</h3>
+                    <div class="space-y-2">
+                        <button class="btn-primary w-full">Primary Button</button>
+                        <button class="btn-secondary w-full">Secondary Button</button>
+                        <button class="btn-outline w-full">Outline Button</button>
+                    </div>
+                </div>
+
+                <!-- Form Elements -->
+                <div>
+                    <h3 class="font-semibold mb-3">Form Elements</h3>
+                    <div class="space-y-2">
+                        <input type="text" placeholder="Text input" class="input">
+                        <input type="email" placeholder="Email input" class="input">
+                        <select class="input">
+                            <option>Select option</option>
+                            <option>Option 1</option>
+                            <option>Option 2</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Alerts -->
+                <div>
+                    <h3 class="font-semibold mb-3">Alerts</h3>
+                    <div class="space-y-2">
+                        <div class="alert">
+                            ℹ️ Info alert message
+                        </div>
+                        <div class="alert alert-destructive">
+                            ❌ Error alert message
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Check OKLCH support
+        function checkOKLCHSupport() {
+            const oklchSupported = CSS.supports('color', 'oklch(0.5 0.2 180)');
+            if (!oklchSupported) {
+                document.getElementById('oklch-warning').style.display = 'block';
+            }
+            return oklchSupported;
+        }
+
+        // Theme toggle functionality
+        function initThemeToggle() {
+            const themeToggle = document.getElementById('theme-toggle');
+            const themeText = document.getElementById('theme-text');
+            let isDark = false;
+
+            themeToggle.addEventListener('click', () => {
+                isDark = !isDark;
+                document.documentElement.classList.toggle('dark', isDark);
+                themeText.textContent = isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode';
+            });
+        }
+
+        // Simulate processing workflow
+        function startProcessing() {
+            const ccFile = document.getElementById('cc-statement').files[0];
+            const expenseFile = document.getElementById('expense-report').files[0];
+
+            if (!ccFile || !expenseFile) {
+                alert('Please select both files before processing.');
+                return;
+            }
+
+            // Hide upload step, show progress
+            document.getElementById('upload-step').style.display = 'none';
+            document.getElementById('progress-step').style.display = 'block';
+
+            // Simulate progress
+            let progress = 25;
+            const progressBar = document.getElementById('progress-bar');
+            const progressPercent = document.getElementById('progress-percent');
+            const progressText = document.getElementById('progress-text');
+
+            const steps = [
+                'Extracting text from documents...',
+                'Parsing credit card transactions...',
+                'Processing expense items...',
+                'Matching transactions to expenses...',
+                'Generating reports...'
+            ];
+
+            let stepIndex = 0;
+            const interval = setInterval(() => {
+                progress += 15;
+                stepIndex++;
+
+                if (progress > 100) {
+                    progress = 100;
+                    clearInterval(interval);
+                    setTimeout(showResults, 1000);
+                }
+
+                progressBar.style.width = progress + '%';
+                progressPercent.textContent = progress + '%';
+
+                if (stepIndex < steps.length) {
+                    progressText.textContent = steps[stepIndex];
+                }
+            }, 1500);
+        }
+
+        function showResults() {
+            document.getElementById('progress-step').style.display = 'none';
+            document.getElementById('results-step').style.display = 'block';
+        }
+
+        function startNew() {
+            document.getElementById('results-step').style.display = 'none';
+            document.getElementById('upload-step').style.display = 'block';
+
+            // Reset form
+            document.getElementById('cc-statement').value = '';
+            document.getElementById('expense-report').value = '';
+
+            // Reset progress
+            document.getElementById('progress-bar').style.width = '25%';
+            document.getElementById('progress-percent').textContent = '25%';
+            document.getElementById('progress-text').textContent = 'Extracting text from documents...';
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            checkOKLCHSupport();
+            initThemeToggle();
+        });
+    </script>
+</body>
+</html>
