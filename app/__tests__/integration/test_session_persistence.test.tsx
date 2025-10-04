@@ -8,7 +8,6 @@
 describe('Session Persistence Integration Tests', () => {
   test('saveSession stores session ID with 24-hour TTL', () => {
     // TODO: Import session storage utilities when implemented
-    // import { saveSession } from '@/lib/session-storage';
 
     const sessionId = '550e8400-e29b-41d4-a716-446655440000';
 

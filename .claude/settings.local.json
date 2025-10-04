@@ -13,8 +13,18 @@
       "mcp__chrome-devtools__navigate_page",
       "mcp__chrome-devtools__take_snapshot",
       "Bash(mv:*)",
-      "mcp__chrome-devtools:*"
-
+      "mcp__chrome-devtools:*",
+      "Bash(.specify/scripts/powershell/setup-plan.ps1 -Json)",
+      "Bash(.specify/scripts/bash/setup-plan.sh:*)",
+      "WebSearch",
+      "Bash(.specify/scripts/bash/update-agent-context.sh:*)",
+      "Bash(.specify/scripts/bash/check-prerequisites.sh:*)",
+      "Bash(npm install:*)",
+      "Bash(npx storybook@latest init:*)",
+      "Bash(npm test)",
+      "Bash(npm run:*)",
+      "Bash(npm cache clean:*)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": [
