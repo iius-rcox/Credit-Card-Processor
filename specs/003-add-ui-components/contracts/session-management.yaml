@@ -1,0 +1,405 @@
+openapi: 3.0.3
+info:
+  title: Session Management API Contracts
+  description: Frontend contracts for session management UI components
+  version: 1.0.0
+
+paths:
+  /api/session/{sessionId}:
+    get:
+      summary: Get session details
+      description: Retrieve session data for display in session browser
+      operationId: getSession
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Backend session ID
+      responses:
+        '200':
+          description: Session data retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '404':
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/session/{sessionId}/update:
+    post:
+      summary: Update session with new receipts
+      description: Upload additional expense reports to existing session
+      operationId: updateSessionReceipts
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                expenseReport:
+                  type: string
+                  format: binary
+                  description: Expense report PDF file
+              required:
+                - expenseReport
+      responses:
+        '200':
+          description: Receipt update successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateResponse'
+        '400':
+          description: Invalid file or request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/reports/{sessionId}:
+    get:
+      summary: Get session reports
+      description: Download Excel/CSV reports for historical sessions
+      operationId: getSessionReports
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Reports available for download
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportsResponse'
+        '404':
+          description: Session or reports not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    SessionResponse:
+      type: object
+      required:
+        - session_id
+        - created_at
+        - updated_at
+        - processing_status
+        - employees
+        - matching_results
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        processing_status:
+          type: string
+          enum: [pending, processing, complete, error]
+        error_message:
+          type: string
+          nullable: true
+        employees:
+          type: array
+          items:
+            $ref: '#/components/schemas/Employee'
+        matching_results:
+          type: array
+          items:
+            $ref: '#/components/schemas/MatchingResult'
+
+    UpdateResponse:
+      type: object
+      required:
+        - session_id
+        - updated
+        - updated_at
+        - summary_changes
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        updated:
+          type: boolean
+        updated_at:
+          type: string
+          format: date-time
+        summary_changes:
+          type: object
+          properties:
+            previous:
+              type: object
+              properties:
+                complete_employees:
+                  type: integer
+                incomplete_expenses:
+                  type: integer
+            current:
+              type: object
+              properties:
+                complete_employees:
+                  type: integer
+                incomplete_expenses:
+                  type: integer
+            newly_complete_employees:
+              type: array
+              items:
+                type: string
+            newly_incomplete_expenses:
+              type: array
+              items:
+                type: string
+        new_excel_report_url:
+          type: string
+          format: uri
+          nullable: true
+        new_csv_export_url:
+          type: string
+          format: uri
+          nullable: true
+
+    ReportsResponse:
+      type: object
+      required:
+        - session_id
+        - summary
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        excel_report:
+          type: object
+          nullable: true
+          properties:
+            url:
+              type: string
+              format: uri
+            file_size:
+              type: integer
+            row_count:
+              type: integer
+            generated_at:
+              type: string
+              format: date-time
+        csv_export:
+          type: object
+          nullable: true
+          properties:
+            url:
+              type: string
+              format: uri
+            file_size:
+              type: integer
+            row_count:
+              type: integer
+            included_employee_count:
+              type: integer
+            generated_at:
+              type: string
+              format: date-time
+        summary:
+          $ref: '#/components/schemas/ReportSummary'
+
+    Employee:
+      type: object
+      required:
+        - employee_id
+        - name
+        - card_number
+        - expenses
+        - receipts
+        - completion_status
+      properties:
+        employee_id:
+          type: string
+        name:
+          type: string
+        card_number:
+          type: string
+        expenses:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExpenseTransaction'
+        receipts:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReceiptRecord'
+        completion_status:
+          type: string
+          enum: [complete, incomplete]
+
+    ExpenseTransaction:
+      type: object
+      required:
+        - transaction_id
+        - employee_id
+        - transaction_date
+        - transaction_amount
+        - transaction_name
+        - has_receipt
+        - has_gl_code
+        - status
+      properties:
+        transaction_id:
+          type: string
+        employee_id:
+          type: string
+        transaction_date:
+          type: string
+          format: date
+        transaction_amount:
+          type: number
+          format: float
+        transaction_name:
+          type: string
+        vendor_invoice_number:
+          type: string
+          nullable: true
+        invoice_date:
+          type: string
+          format: date
+          nullable: true
+        header_description:
+          type: string
+          nullable: true
+        job:
+          type: string
+          nullable: true
+        phase:
+          type: string
+          nullable: true
+        cost_type:
+          type: string
+          nullable: true
+        gl_account:
+          type: string
+          nullable: true
+        item_description:
+          type: string
+          nullable: true
+        um:
+          type: string
+          nullable: true
+        tax:
+          type: number
+          format: float
+          nullable: true
+        pay_type:
+          type: string
+          nullable: true
+        has_receipt:
+          type: boolean
+        has_gl_code:
+          type: boolean
+        status:
+          type: string
+          enum: [Missing Receipt, Missing GL Code, Missing Both, Complete]
+
+    ReceiptRecord:
+      type: object
+      required:
+        - receipt_id
+        - employee_id
+        - amount
+      properties:
+        receipt_id:
+          type: string
+        employee_id:
+          type: string
+        amount:
+          type: number
+          format: float
+        gl_code:
+          type: string
+          nullable: true
+        project_code:
+          type: string
+          nullable: true
+
+    MatchingResult:
+      type: object
+      required:
+        - expense_transaction_id
+        - has_gl_code
+        - match_reason
+      properties:
+        expense_transaction_id:
+          type: string
+        matched_receipt_id:
+          type: string
+          nullable: true
+        has_gl_code:
+          type: boolean
+        match_reason:
+          type: string
+          enum: [exact_match, no_receipt_found, multiple_matches]
+
+    ReportSummary:
+      type: object
+      required:
+        - total_employees
+        - complete_employees
+        - incomplete_employees
+        - total_expenses
+        - complete_expenses
+        - expenses_missing_receipts
+        - expenses_missing_gl_codes
+        - expenses_missing_both
+      properties:
+        total_employees:
+          type: integer
+        complete_employees:
+          type: integer
+        incomplete_employees:
+          type: integer
+        total_expenses:
+          type: integer
+        complete_expenses:
+          type: integer
+        expenses_missing_receipts:
+          type: integer
+        expenses_missing_gl_codes:
+          type: integer
+        expenses_missing_both:
+          type: integer
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+        detail:
+          type: string

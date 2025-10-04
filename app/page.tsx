@@ -120,8 +120,10 @@ export default function Home() {
   };
 
   const handleUploadNewReceipts = () => {
-    // TODO: Implement update workflow
-    alert("Update workflow not yet implemented");
+    if (sessionId) {
+      // Navigate to receipt update page
+      window.location.href = `/sessions/${sessionId}/update`;
+    }
   };
 
   const handleStartNew = () => {
@@ -146,13 +148,41 @@ export default function Home() {
 
   return (
     <ErrorBoundary>
-      <div className="min-h-screen p-8 pb-20 gap-16 sm:p-20">
-        <header className="mb-8 text-center">
-          <h1 className="text-4xl font-bold mb-2">Expense Reconciliation System</h1>
-          <p className="text-muted-foreground">
-            Upload credit card statements and expense reports for automated matching
-          </p>
-        </header>
+      <div className="min-h-screen">
+        {/* Navigation Header */}
+        <div className="bg-white border-b">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between h-16">
+              <div className="flex items-center">
+                <h1 className="text-xl font-semibold text-gray-900">
+                  Expense Reconciliation System
+                </h1>
+              </div>
+              <nav className="flex space-x-4">
+                <a
+                  href="/"
+                  className="bg-blue-100 text-blue-700 px-3 py-2 rounded-md text-sm font-medium"
+                >
+                  Process Expenses
+                </a>
+                <a
+                  href="/sessions"
+                  className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
+                >
+                  Session Management
+                </a>
+              </nav>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-8 pb-20 gap-16 sm:p-20">
+          <header className="mb-8 text-center">
+            <h1 className="text-4xl font-bold mb-2">Expense Reconciliation System</h1>
+            <p className="text-muted-foreground">
+              Upload credit card statements and expense reports for automated matching
+            </p>
+          </header>
 
         <main>
           {/* Global Error Display */}
@@ -199,6 +229,7 @@ export default function Home() {
             </div>
           )}
         </main>
+        </div>
       </div>
     </ErrorBoundary>
   );
