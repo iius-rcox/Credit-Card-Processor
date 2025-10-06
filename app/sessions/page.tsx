@@ -6,15 +6,16 @@
  * specs/003-add-ui-components/plan.md
  */
 
-import { Metadata } from 'next';
-import SessionBrowser from '@/components/session-management/session-browser';
+"use client";
 
-export const metadata: Metadata = {
-  title: 'Session Management - Expense Reconciliation System',
-  description: 'Manage your monthly expense processing sessions',
-};
+import SessionBrowser from '@/components/session-management/session-browser';
+import { useEffect } from 'react';
 
 export default function SessionsPage() {
+  // Set page title dynamically since we can't use metadata in Client Components
+  useEffect(() => {
+    document.title = 'Session Management - Expense Reconciliation System';
+  }, []);
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Navigation Header */}
