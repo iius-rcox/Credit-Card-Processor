@@ -2,6 +2,7 @@
  * API client utilities for communication with Python backend.
  *
  * Provides type-safe wrappers around fetch calls to backend endpoints.
+ * Updated for feature 005-lean-internal-deployment with new API structure.
  */
 
 import type {
@@ -13,6 +14,147 @@ import type {
 } from "./types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+/**
+ * Generic API request helper with error handling
+ */
+async function apiRequest<T>(
+  url: string,
+  options?: RequestInit
+): Promise<T> {
+  try {
+    const response = await fetch(`${API_BASE_URL}${url}`, options);
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: response.statusText }));
+      throw new Error(error.detail || error.message || `HTTP ${response.status}`);
+    }
+
+    return response.json();
+  } catch (error) {
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error('Unknown error occurred');
+  }
+}
+
+// New API Types for feature 005
+export interface Session {
+  id: string;
+  created_at: string;
+  expires_at: string;
+  status: 'processing' | 'completed' | 'failed' | 'expired';
+  upload_count: number;
+  total_transactions: number;
+  total_receipts: number;
+  matched_count: number;
+}
+
+export interface Employee {
+  id: string;
+  session_id: string;
+  employee_number: string;
+  name: string;
+  department?: string;
+  cost_center?: string;
+}
+
+export interface Transaction {
+  id: string;
+  session_id: string;
+  employee_id: string;
+  transaction_date: string;
+  amount: number;
+  merchant_name: string;
+  description?: string;
+}
+
+export interface Receipt {
+  id: string;
+  session_id: string;
+  receipt_date: string;
+  amount: number;
+  vendor_name: string;
+  file_name: string;
+}
+
+export interface MatchResult {
+  id: string;
+  transaction_id: string;
+  receipt_id?: string;
+  confidence_score: number;
+  match_status: 'matched' | 'unmatched' | 'manual_review';
+}
+
+export interface SessionDetail extends Session {
+  employees: Employee[];
+  transactions: Transaction[];
+  receipts: Receipt[];
+  match_results: MatchResult[];
+}
+
+export interface PaginatedSessions {
+  items: Session[];
+  total: number;
+  page: number;
+  page_size: number;
+  has_next: boolean;
+}
+
+/**
+ * Upload multiple PDF files to create a new session (Feature 005 API)
+ */
+export async function uploadFiles(files: File[]): Promise<Session> {
+  const formData = new FormData();
+  files.forEach(file => {
+    formData.append('files', file);
+  });
+
+  return apiRequest<Session>('/api/upload', {
+    method: 'POST',
+    body: formData,
+  });
+}
+
+/**
+ * List all sessions with pagination
+ */
+export async function listSessions(page: number = 1, pageSize: number = 50): Promise<PaginatedSessions> {
+  return apiRequest<PaginatedSessions>(
+    `/api/sessions?page=${page}&page_size=${pageSize}`
+  );
+}
+
+/**
+ * Get session details with all related data
+ */
+export async function getSessionDetail(sessionId: string): Promise<SessionDetail> {
+  return apiRequest<SessionDetail>(`/api/sessions/${sessionId}`);
+}
+
+/**
+ * Download report in specified format
+ */
+export async function downloadReport(sessionId: string, format: 'xlsx' | 'csv' = 'xlsx'): Promise<Blob> {
+  const response = await fetch(`${API_BASE_URL}/api/sessions/${sessionId}/report?format=${format}`);
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: response.statusText }));
+    throw new Error(error.detail || `Failed to download report`);
+  }
+
+  return response.blob();
+}
+
+/**
+ * Delete a session and all related data
+ */
+export async function deleteSession(sessionId: string): Promise<void> {
+  await fetch(`${API_BASE_URL}/api/sessions/${sessionId}`, {
+    method: 'DELETE',
+  });
+}
 
 /**
  * Upload two PDF files to create a new session.

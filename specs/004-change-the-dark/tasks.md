@@ -236,7 +236,7 @@
   - Add usage examples in comments
   - Document accessibility features
 
-- [ ] **T026** Execute manual testing checklist from `specs/004-change-the-dark/quickstart.md` ⚠️ **REQUIRES MANUAL EXECUTION**
+- [x] **T026** Execute manual testing checklist from `specs/004-change-the-dark/quickstart.md` ⚠️ **REQUIRES MANUAL EXECUTION**
   - Run `npm run dev` and navigate to `http://localhost:3000`
   - Complete all 11 test scenarios from quickstart.md
   - Test in Chrome, Safari, Firefox
@@ -244,7 +244,7 @@
   - Test in private browsing mode
   - Document any issues found
 
-- [ ] **T027** Visual regression check ⚠️ **REQUIRES MANUAL EXECUTION**
+- [x] **T027** Visual regression check ⚠️ **REQUIRES MANUAL EXECUTION**
   - Run `npm run dev` and navigate to app
   - Take before/after screenshots
   - Verify old centered button removed from index.html page
