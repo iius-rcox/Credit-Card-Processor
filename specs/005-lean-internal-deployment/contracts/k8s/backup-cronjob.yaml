@@ -1,0 +1,141 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-backup
+  namespace: credit-card-processor
+  labels:
+    app: postgres-backup
+    component: maintenance
+spec:
+  # Weekly backup: Sunday at 1:00 AM UTC
+  schedule: "0 1 * * 0"
+
+  # Retain last 3 successful backup jobs
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+
+  # Concurrent policy: replace if backup is still running
+  concurrencyPolicy: Replace
+
+  jobTemplate:
+    spec:
+      # Timeout after 1 hour
+      activeDeadlineSeconds: 3600
+
+      template:
+        metadata:
+          labels:
+            app: postgres-backup
+            component: maintenance
+            azure.workload.identity/use: "true"
+        spec:
+          # Service account for workload identity (Azure Blob access)
+          serviceAccountName: credit-card-processor-sa
+
+          restartPolicy: OnFailure
+
+          containers:
+          - name: backup
+            image: postgres:15-alpine
+            imagePullPolicy: IfNotPresent
+
+            command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              echo "Starting PostgreSQL backup..."
+
+              # Create backup filename with timestamp
+              BACKUP_FILE="backup-$(date +%Y%m%d-%H%M%S).sql.gz"
+              BACKUP_PATH="/tmp/${BACKUP_FILE}"
+
+              # Perform pg_dump with compression
+              pg_dump -h postgres-service \
+                      -U ${POSTGRES_USER} \
+                      -d ${POSTGRES_DB} \
+                      --verbose \
+                      --no-owner \
+                      --no-acl \
+                      --clean \
+                      --if-exists \
+                      | gzip > ${BACKUP_PATH}
+
+              echo "Backup created: ${BACKUP_PATH}"
+
+              # Upload to Azure Blob Storage using az CLI
+              az storage blob upload \
+                --account-name ${AZURE_STORAGE_ACCOUNT} \
+                --container-name ${BACKUP_CONTAINER} \
+                --name "postgres/${BACKUP_FILE}" \
+                --file ${BACKUP_PATH} \
+                --auth-mode login
+
+              echo "Backup uploaded to Azure Blob Storage"
+
+              # Cleanup old backups (keep last 12 weeks)
+              CUTOFF_DATE=$(date -d "84 days ago" +%Y%m%d)
+              echo "Cleaning up backups older than ${CUTOFF_DATE}..."
+
+              az storage blob list \
+                --account-name ${AZURE_STORAGE_ACCOUNT} \
+                --container-name ${BACKUP_CONTAINER} \
+                --prefix postgres/backup- \
+                --auth-mode login \
+                --query "[?properties.creationTime < '${CUTOFF_DATE}'].name" \
+                --output tsv | while read blob_name; do
+                  echo "Deleting old backup: ${blob_name}"
+                  az storage blob delete \
+                    --account-name ${AZURE_STORAGE_ACCOUNT} \
+                    --container-name ${BACKUP_CONTAINER} \
+                    --name "${blob_name}" \
+                    --auth-mode login
+              done
+
+              echo "Backup completed successfully"
+
+            # Environment variables
+            env:
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secrets
+                  key: POSTGRES_DB
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secrets
+                  key: POSTGRES_USER
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secrets
+                  key: POSTGRES_PASSWORD
+            # Azure Storage configuration
+            - name: AZURE_STORAGE_ACCOUNT
+              value: "${AZURE_STORAGE_ACCOUNT_NAME}"
+            - name: BACKUP_CONTAINER
+              value: "postgres-backups"
+
+            # Resource limits
+            resources:
+              requests:
+                cpu: 100m
+                memory: 256Mi
+              limits:
+                cpu: 500m
+                memory: 512Mi
+
+            # Security context
+            securityContext:
+              allowPrivilegeEscalation: false
+              runAsNonRoot: true
+              runAsUser: 999
+              capabilities:
+                drop:
+                - ALL
+
+          # Security settings
+          securityContext:
+            fsGroup: 999
+            runAsNonRoot: true

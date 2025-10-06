@@ -1,0 +1,106 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: credit-card-processor
+  labels:
+    app: frontend
+    component: web
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+        component: web
+    spec:
+      # Image pull secret for ACR
+      imagePullSecrets:
+      - name: acr-secret
+
+      containers:
+      - name: frontend
+        image: iiusacr.azurecr.io/expense-frontend:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 3000
+          name: http
+          protocol: TCP
+
+        # Environment variables
+        env:
+        # Backend API URL (internal cluster service)
+        - name: NEXT_PUBLIC_API_URL
+          value: http://backend-service:8000
+        # Next.js production mode
+        - name: NODE_ENV
+          value: production
+        # Optional: Telemetry disabled for privacy
+        - name: NEXT_TELEMETRY_DISABLED
+          value: "1"
+
+        # Resource limits from research.md
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 300m
+            memory: 512Mi
+
+        # Health checks
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 3000
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 3000
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+
+        # Startup probe for Next.js initialization
+        startupProbe:
+          httpGet:
+            path: /
+            port: 3000
+            scheme: HTTP
+          initialDelaySeconds: 0
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 12
+
+        # Security context
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1001
+          capabilities:
+            drop:
+            - ALL
+
+      # Graceful shutdown
+      terminationGracePeriodSeconds: 30
+
+      # Security settings
+      securityContext:
+        fsGroup: 1001
+        runAsNonRoot: true

@@ -1,0 +1,135 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: credit-card-processor
+  labels:
+    app: backend
+    component: api
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+        component: api
+        azure.workload.identity/use: "true"
+    spec:
+      # Service account for workload identity (Azure Key Vault access)
+      serviceAccountName: credit-card-processor-sa
+
+      # Image pull secret for ACR
+      imagePullSecrets:
+      - name: acr-secret
+
+      containers:
+      - name: backend
+        image: iiusacr.azurecr.io/expense-backend:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+          name: http
+          protocol: TCP
+
+        # Environment variables
+        env:
+        # Database connection from Key Vault
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secrets
+              key: DATABASE_URL
+        # Redis connection (internal cluster service)
+        - name: REDIS_URL
+          value: redis://redis.credit-card-processor.svc.cluster.local:6379
+        # Application configuration
+        - name: ENVIRONMENT
+          value: production
+        - name: LOG_LEVEL
+          value: info
+        - name: WORKERS
+          value: "2"
+        # CORS origins for frontend
+        - name: ALLOWED_ORIGINS
+          value: https://credit-card.ii-us.com
+
+        # Resource limits from research.md
+        resources:
+          requests:
+            cpu: 200m
+            memory: 512Mi
+          limits:
+            cpu: 500m
+            memory: 1Gi
+
+        # Health checks for zero-downtime deployments
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 8000
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+
+        # Startup probe for slow initialization
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8000
+            scheme: HTTP
+          initialDelaySeconds: 0
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 12
+
+        # Mount secrets from Azure Key Vault
+        volumeMounts:
+        - name: secrets-store
+          mountPath: /mnt/secrets-store
+          readOnly: true
+
+        # Security context
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+
+      # Volume for Azure Key Vault secrets
+      volumes:
+      - name: secrets-store
+        csi:
+          driver: secrets-store.csi.k8s.io
+          readOnly: true
+          volumeAttributes:
+            secretProviderClass: azure-keyvault-secrets
+
+      # Graceful shutdown
+      terminationGracePeriodSeconds: 30
+
+      # Security settings
+      securityContext:
+        fsGroup: 1000
+        runAsNonRoot: true

@@ -1,0 +1,152 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: data-cleanup
+  namespace: credit-card-processor
+  labels:
+    app: data-cleanup
+    component: maintenance
+spec:
+  # Daily at 2:00 AM UTC
+  schedule: "0 2 * * *"
+
+  # Retain last 7 successful cleanup jobs
+  successfulJobsHistoryLimit: 7
+  failedJobsHistoryLimit: 3
+
+  # Concurrent policy: forbid overlapping cleanup jobs
+  concurrencyPolicy: Forbid
+
+  jobTemplate:
+    spec:
+      # Timeout after 30 minutes
+      activeDeadlineSeconds: 1800
+
+      template:
+        metadata:
+          labels:
+            app: data-cleanup
+            component: maintenance
+        spec:
+          restartPolicy: OnFailure
+
+          containers:
+          - name: cleanup
+            image: postgres:15-alpine
+            imagePullPolicy: IfNotPresent
+
+            command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              echo "Starting 90-day data cleanup..."
+
+              # Calculate cutoff date (90 days ago)
+              CUTOFF_DATE=$(date -d "90 days ago" +%Y-%m-%d)
+              echo "Deleting records older than: ${CUTOFF_DATE}"
+
+              # Connect to database and perform cleanup
+              psql -h postgres-service \
+                   -U ${POSTGRES_USER} \
+                   -d ${POSTGRES_DB} \
+                   -v ON_ERROR_STOP=1 \
+                   <<-EOSQL
+                -- Start transaction
+                BEGIN;
+
+                -- Log cleanup start
+                SELECT 'Starting cleanup at ' || NOW();
+
+                -- Cleanup sessions table
+                WITH deleted_sessions AS (
+                  DELETE FROM sessions
+                  WHERE created_at < NOW() - INTERVAL '90 days'
+                  RETURNING id
+                )
+                SELECT COUNT(*) AS sessions_deleted FROM deleted_sessions;
+
+                -- Cleanup transactions table
+                WITH deleted_transactions AS (
+                  DELETE FROM transactions
+                  WHERE created_at < NOW() - INTERVAL '90 days'
+                  RETURNING id
+                )
+                SELECT COUNT(*) AS transactions_deleted FROM deleted_transactions;
+
+                -- Cleanup uploaded_files table (if exists)
+                WITH deleted_files AS (
+                  DELETE FROM uploaded_files
+                  WHERE created_at < NOW() - INTERVAL '90 days'
+                  RETURNING id
+                )
+                SELECT COUNT(*) AS files_deleted FROM deleted_files;
+
+                -- Cleanup processing_logs table (if exists)
+                WITH deleted_logs AS (
+                  DELETE FROM processing_logs
+                  WHERE created_at < NOW() - INTERVAL '90 days'
+                  RETURNING id
+                )
+                SELECT COUNT(*) AS logs_deleted FROM deleted_logs;
+
+                -- Vacuum analyze to reclaim space
+                VACUUM ANALYZE sessions;
+                VACUUM ANALYZE transactions;
+
+                -- Log cleanup completion
+                SELECT 'Cleanup completed at ' || NOW();
+
+                -- Commit transaction
+                COMMIT;
+              EOSQL
+
+              echo "Cleanup completed successfully"
+
+              # Get database size for monitoring
+              echo "Current database size:"
+              psql -h postgres-service \
+                   -U ${POSTGRES_USER} \
+                   -d ${POSTGRES_DB} \
+                   -c "SELECT pg_size_pretty(pg_database_size('${POSTGRES_DB}')) AS database_size;"
+
+            # Environment variables
+            env:
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secrets
+                  key: POSTGRES_DB
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secrets
+                  key: POSTGRES_USER
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secrets
+                  key: POSTGRES_PASSWORD
+
+            # Resource limits
+            resources:
+              requests:
+                cpu: 100m
+                memory: 128Mi
+              limits:
+                cpu: 300m
+                memory: 256Mi
+
+            # Security context
+            securityContext:
+              allowPrivilegeEscalation: false
+              runAsNonRoot: true
+              runAsUser: 999
+              capabilities:
+                drop:
+                - ALL
+
+          # Security settings
+          securityContext:
+            fsGroup: 999
+            runAsNonRoot: true

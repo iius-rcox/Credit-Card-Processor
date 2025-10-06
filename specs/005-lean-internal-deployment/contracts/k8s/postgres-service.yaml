@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-service
+  namespace: credit-card-processor
+  labels:
+    app: postgres
+    component: database
+spec:
+  # ClusterIP for internal access only
+  type: ClusterIP
+  # StatefulSet requires headless service for stable network identity
+  clusterIP: None
+  ports:
+  - port: 5432
+    targetPort: 5432
+    protocol: TCP
+    name: postgres
+  selector:
+    app: postgres
+  # Session affinity to ensure connections go to the same pod
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800
