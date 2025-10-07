@@ -1,9 +1,10 @@
 #!/bin/bash
 
 # Script to start Docker containers for local testing
-# Working directory: /Users/rogercox/Credit-Card-Processor
+# Run from the deploy/ directory
 
-cd /Users/rogercox/Credit-Card-Processor
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
 
 echo "========================================="
 echo "Step 1: Stopping any existing containers"

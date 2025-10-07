@@ -12,7 +12,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./backend/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ../backend/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ccprocessor -d credit_card_db"]
       interval: 10s
@@ -32,7 +32,7 @@ services:
 
   backend:
     build:
-      context: ./backend
+      context: ../backend
       dockerfile: Dockerfile
     container_name: credit-card-backend
     environment:
@@ -49,7 +49,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./backend:/app
+      - ../backend:/app
     depends_on:
       postgres:
         condition: service_healthy
@@ -67,7 +67,7 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - .:/app
+      - ..:/app
       - /app/node_modules
       - /app/.next
     depends_on:

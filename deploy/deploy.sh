@@ -6,6 +6,11 @@
 
 set -e  # Exit on error
 
+# Get script directory and set paths
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+DEPLOY_DIR="$SCRIPT_DIR"
+
 # Color output
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -66,16 +71,14 @@ echo -e "${GREEN}✓${NC} ACR authentication successful"
 # Step 4: Build backend Docker image
 echo -e "${BLUE}[4/10]${NC} Building backend Docker image..."
 
-cd backend
-docker build -t ${BACKEND_IMAGE}:${VERSION} -t ${BACKEND_IMAGE}:latest .
-cd ..
+docker build -t ${BACKEND_IMAGE}:${VERSION} -t ${BACKEND_IMAGE}:latest -f "${PROJECT_ROOT}/backend/Dockerfile" "${PROJECT_ROOT}/backend"
 
 echo -e "${GREEN}✓${NC} Backend image built: ${BACKEND_IMAGE}:${VERSION}"
 
 # Step 5: Build frontend Docker image
 echo -e "${BLUE}[5/10]${NC} Building frontend Docker image..."
 
-docker build -t ${FRONTEND_IMAGE}:${VERSION} -t ${FRONTEND_IMAGE}:latest .
+docker build -f "${DEPLOY_DIR}/Dockerfile" -t ${FRONTEND_IMAGE}:${VERSION} -t ${FRONTEND_IMAGE}:latest "${PROJECT_ROOT}"
 
 echo -e "${GREEN}✓${NC} Frontend image built: ${FRONTEND_IMAGE}:${VERSION}"
 

@@ -18,6 +18,11 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# Get script directory and set paths
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$ProjectRoot = Split-Path -Parent $ScriptDir
+$DeployDir = Join-Path $ProjectRoot "deploy"
+
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "  Full AKS Deployment Script" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
@@ -46,7 +51,8 @@ if ($LASTEXITCODE -ne 0) {
 
 # Step 3: Build frontend image
 Write-Host "[3/11] Building frontend Docker image..." -ForegroundColor Green
-docker build -t "$ACRName.azurecr.io/expense-frontend:$FrontendTag" .
+$DockerfilePath = Join-Path $DeployDir "Dockerfile"
+docker build -f $DockerfilePath -t "$ACRName.azurecr.io/expense-frontend:$FrontendTag" $ProjectRoot
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Frontend Docker build failed"
     exit 1
@@ -62,7 +68,9 @@ if ($LASTEXITCODE -ne 0) {
 
 # Step 5: Build backend image
 Write-Host "[5/11] Building backend Docker image..." -ForegroundColor Green
-docker build -t "$ACRName.azurecr.io/expense-backend:$BackendTag" -f backend/Dockerfile ./backend
+$BackendDir = Join-Path $ProjectRoot "backend"
+$BackendDockerfile = Join-Path $BackendDir "Dockerfile"
+docker build -t "$ACRName.azurecr.io/expense-backend:$BackendTag" -f $BackendDockerfile $BackendDir
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Backend Docker build failed"
     exit 1

@@ -15,6 +15,11 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# Get script directory and set paths
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$ProjectRoot = Split-Path -Parent $ScriptDir
+$DeployDir = Join-Path $ProjectRoot "deploy"
+
 Write-Host "=== Frontend Deployment Script ===" -ForegroundColor Cyan
 Write-Host "Image Tag: $ImageTag" -ForegroundColor Yellow
 Write-Host "ACR: $ACRName" -ForegroundColor Yellow
@@ -23,7 +28,8 @@ Write-Host ""
 
 # Step 1: Build Docker image
 Write-Host "[1/5] Building Docker image..." -ForegroundColor Green
-docker build -t "$ACRName.azurecr.io/expense-frontend:$ImageTag" .
+$DockerfilePath = Join-Path $DeployDir "Dockerfile"
+docker build -f $DockerfilePath -t "$ACRName.azurecr.io/expense-frontend:$ImageTag" $ProjectRoot
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Docker build failed"
     exit 1
