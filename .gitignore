@@ -60,13 +60,6 @@ server/.mypy_cache/
 # build artifacts / local outputs
 dist/
 *.local
-test.html
-index.html
 server/htmlcov/
-docs/
-stories/
-__tests__/
-app/__tests__/
-lib/__tests__/
-server/tests/
-specs/
+deploy/.next/
+deploy/build/

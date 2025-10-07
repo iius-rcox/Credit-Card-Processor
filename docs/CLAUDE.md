@@ -30,7 +30,7 @@ app/                    # Next.js app directory
 ├── layout.tsx         # Root layout
 ├── page.tsx          # Main page (upload, progress, results)
 ├── globals.css       # Theme CSS variables
-└── __tests__/        # Existing tests
+└── __tests__/        # App-specific tests
 
 components/
 ├── ui/               # shadcn/ui components
@@ -41,19 +41,24 @@ components/
 │   ├── alert.tsx
 │   ├── progress.tsx
 │   ├── form.tsx
-│   └── tooltip.tsx   # Radix UI tooltip (add if missing)
+│   └── tooltip.tsx   # Radix UI tooltip
 ├── upload-form.tsx   # Upload workflow
 ├── progress-display.tsx
 ├── results-panel.tsx
-└── theme-toggle.tsx  # NEW - Dark mode toggle icon component
+└── theme-toggle.tsx  # Dark mode toggle icon component
 
 lib/
 ├── utils.ts          # Tailwind utilities
 ├── theme-detection.ts # OKLCH + system preference detection
-└── theme-storage.ts  # NEW - Storage abstraction layer
+└── theme-storage.ts  # Storage abstraction layer
 
-.storybook/           # Component stories
-└── stories/
+__tests__/            # Test files and test HTML pages
+.storybook/           # Storybook configuration
+stories/              # Component stories
+deploy/               # Deployment scripts, Docker files
+docs/                 # Documentation (MD files)
+specs/                # Feature specifications
+backend/              # Backend server code
 ```
 
 ## Current Feature: Dark Mode Toggle Icon
