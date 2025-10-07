@@ -18,6 +18,8 @@ spec:
         app: postgres
         component: database
     spec:
+      securityContext:
+        fsGroup: 999
       containers:
       - name: postgres
         image: postgres:15-alpine
@@ -47,14 +49,14 @@ spec:
         - name: PGDATA
           value: /var/lib/postgresql/data/pgdata
 
-        # Resource limits from research.md
+        # Resource limits (reduced CPU for cluster capacity)
         resources:
           requests:
-            cpu: 500m
-            memory: 1Gi
+            cpu: 100m
+            memory: 256Mi
           limits:
-            cpu: 1000m
-            memory: 2Gi
+            cpu: 250m
+            memory: 512Mi
 
         # Health checks for high availability
         livenessProbe:

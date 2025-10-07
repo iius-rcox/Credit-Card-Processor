@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { uploadPDFs } from "@/lib/api-client";
-import { saveSession } from "@/lib/session-storage";
+import { initializeSessionStorage, createNewSession } from "@/lib/session-storage";
 
 interface UploadFormProps {
   onUploadComplete: (sessionId: string) => void;
@@ -44,7 +44,8 @@ export function UploadForm({ onUploadComplete }: UploadFormProps) {
       const response = await uploadPDFs(creditCardFile, expenseReportFile);
 
       // Save session to localStorage
-      saveSession(response.session_id);
+      const storage = initializeSessionStorage();
+      const { sessionId } = createNewSession(storage, `Session ${new Date().toLocaleDateString()}`, response.session_id);
 
       // Show success
       setSuccessMessage(`Files uploaded successfully! Session ID: ${response.session_id}`);
@@ -63,14 +64,14 @@ export function UploadForm({ onUploadComplete }: UploadFormProps) {
       <CardHeader>
         <CardTitle>Upload PDF Files</CardTitle>
         <CardDescription>
-          Upload your Credit Card Statement and Expense Software Report for reconciliation
+          Upload your Cardholder Activity Report and Receipt Report for reconciliation
         </CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Credit Card Statement Input */}
+          {/* Cardholder Activity Report Input */}
           <div className="space-y-2">
-            <Label htmlFor="creditCard">Credit Card Statement (PDF)</Label>
+            <Label htmlFor="creditCard">Cardholder Activity Report (PDF)</Label>
             <Input
               id="creditCard"
               type="file"
@@ -81,9 +82,9 @@ export function UploadForm({ onUploadComplete }: UploadFormProps) {
             />
           </div>
 
-          {/* Expense Report Input */}
+          {/* Receipt Report Input */}
           <div className="space-y-2">
-            <Label htmlFor="expenseReport">Expense Software Report (PDF)</Label>
+            <Label htmlFor="expenseReport">Receipt Report (PDF)</Label>
             <Input
               id="expenseReport"
               type="file"
@@ -110,7 +111,7 @@ export function UploadForm({ onUploadComplete }: UploadFormProps) {
 
           {/* Submit Button */}
           <Button type="submit" disabled={isUploading} className="w-full">
-            {isUploading ? "Uploading..." : "Upload PDFs"}
+            {isUploading ? "Processing..." : "Process Reports"}
           </Button>
         </form>
       </CardContent>

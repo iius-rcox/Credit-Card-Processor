@@ -13,9 +13,16 @@ from sqlalchemy.pool import NullPool
 from .config import settings
 
 
+# Construct database URL from individual parameters
+# Workaround for asyncpg DNS resolution issue in Kubernetes
+database_url = (
+    f"postgresql+asyncpg://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD}"
+    f"@{settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}"
+)
+
 # Create async engine
 engine = create_async_engine(
-    settings.DATABASE_URL,
+    database_url,
     echo=settings.ENVIRONMENT == "development",  # Log SQL in development
     pool_size=5,
     max_overflow=10,

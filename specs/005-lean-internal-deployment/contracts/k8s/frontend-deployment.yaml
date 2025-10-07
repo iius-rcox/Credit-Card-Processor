@@ -28,7 +28,7 @@ spec:
 
       containers:
       - name: frontend
-        image: iiusacr.azurecr.io/expense-frontend:latest
+        image: iiusacr.azurecr.io/expense-frontend:v1.0.0
         imagePullPolicy: Always
         ports:
         - containerPort: 3000
@@ -50,10 +50,10 @@ spec:
         # Resource limits from research.md
         resources:
           requests:
-            cpu: 100m
+            cpu: 50m
             memory: 256Mi
           limits:
-            cpu: 300m
+            cpu: 150m
             memory: 512Mi
 
         # Health checks
