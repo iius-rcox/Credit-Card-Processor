@@ -1,0 +1,146 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: credit-card-processor
+  labels:
+    app: backend
+    component: api
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+        component: api
+        azure.workload.identity/use: "true"
+    spec:
+      # Service account for workload identity (Azure Key Vault access)
+      serviceAccountName: credit-card-processor-sa
+
+      # Image pull secret for ACR
+      imagePullSecrets:
+      - name: acr-secret
+
+      containers:
+      - name: backend
+        image: iiusacr.azurecr.io/expense-backend:v1.0.1
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+          name: http
+          protocol: TCP
+
+        # Environment variables
+        env:
+        # Individual database parameters (asyncpg workaround)
+        - name: POSTGRES_HOST
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secrets
+              key: POSTGRES_HOST
+        - name: POSTGRES_PORT
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secrets
+              key: POSTGRES_PORT
+        - name: POSTGRES_DB
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secrets
+              key: POSTGRES_DB
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secrets
+              key: POSTGRES_USER
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secrets
+              key: POSTGRES_PASSWORD
+        # Fallback DATABASE_URL (may not work with asyncpg DNS)
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secrets
+              key: DATABASE_URL
+        # Redis connection (internal cluster service)
+        - name: REDIS_URL
+          value: redis://redis.credit-card-processor.svc.cluster.local:6379
+        # Application configuration
+        - name: ENVIRONMENT
+          value: production
+        - name: LOG_LEVEL
+          value: INFO
+        - name: WORKERS
+          value: "2"
+        # CORS origins for frontend
+        - name: ALLOWED_ORIGINS
+          value: https://credit-card.ii-us.com
+
+        # Resource limits from research.md
+        resources:
+          requests:
+            cpu: 50m
+            memory: 512Mi
+          limits:
+            cpu: 250m
+            memory: 512Mi
+
+        # Health checks for zero-downtime deployments
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 8000
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 8000
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+
+        # Startup probe for slow initialization
+        startupProbe:
+          httpGet:
+            path: /api/health
+            port: 8000
+            scheme: HTTP
+          initialDelaySeconds: 0
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 12
+
+        # Security context
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+
+      # Graceful shutdown
+      terminationGracePeriodSeconds: 30
+
+      # Security settings
+      securityContext:
+        fsGroup: 1000
+        runAsNonRoot: true

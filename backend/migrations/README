@@ -1,0 +1,20 @@
+Generic single-database configuration with async support.
+
+This migrations folder was created using:
+    alembic init migrations
+
+To create a new migration:
+    cd backend
+    alembic revision --autogenerate -m "description of changes"
+
+To apply migrations:
+    alembic upgrade head
+
+To rollback one migration:
+    alembic downgrade -1
+
+To see current version:
+    alembic current
+
+To see migration history:
+    alembic history

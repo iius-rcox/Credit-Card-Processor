@@ -19,7 +19,6 @@ import { getSession, getReports } from "@/lib/api-client";
 import type { SessionResponse, ReportsResponse } from "@/lib/types";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { ThemeToggle } from "@/components/theme-toggle";
 
 type AppStep = "upload" | "processing" | "results";
 
@@ -172,7 +171,6 @@ export default function Home() {
                 >
                   Session Management
                 </a>
-                <ThemeToggle />
               </nav>
             </div>
           </div>
