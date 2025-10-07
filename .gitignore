@@ -12,7 +12,14 @@
 
 # testing
 /coverage
+
+# OS reserved files (Windows)
 /nul
+/con
+/prn
+/aux
+/com1
+/lpt1
 
 # next.js
 /.next/
@@ -43,3 +50,23 @@ next-env.d.ts
 
 *storybook.log
 storybook-static
+
+# python
+server/.venv/
+server/.pytest_cache/
+server/.mypy_cache/
+**/__pycache__/
+
+# build artifacts / local outputs
+dist/
+*.local
+test.html
+index.html
+server/htmlcov/
+docs/
+stories/
+__tests__/
+app/__tests__/
+lib/__tests__/
+server/tests/
+specs/
