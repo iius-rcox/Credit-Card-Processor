@@ -5,11 +5,13 @@ This module manages the upload workflow including file validation,
 storage, and session creation.
 """
 
+import asyncio
+import logging
 import os
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, TYPE_CHECKING
 from uuid import UUID
 
 from fastapi import HTTPException, UploadFile
@@ -20,6 +22,12 @@ from ..repositories.progress_repository import ProgressRepository
 from ..schemas.processing_progress import ProcessingProgress
 from ..schemas.phase_progress import PhaseProgress
 from .progress_tracker import ProgressTracker
+
+if TYPE_CHECKING:
+    from .extraction_service import ExtractionService
+    from .matching_service import MatchingService
+
+logger = logging.getLogger(__name__)
 
 
 class UploadService:
@@ -427,3 +435,120 @@ class UploadService:
 
             # Remove directory
             temp_dir.rmdir()
+
+
+async def process_session_background(
+    session_id: UUID,
+    extraction_service: "ExtractionService",
+    matching_service: Optional["MatchingService"] = None
+) -> None:
+    """
+    Background task to process uploaded files through extraction and matching.
+
+    This function orchestrates the entire processing workflow:
+    1. Get temp directory path
+    2. Run extraction with progress tracking
+    3. Run matching (if service provided)
+    4. Clean up temp files
+    5. Mark session as completed
+
+    Args:
+        session_id: UUID of the session to process
+        extraction_service: ExtractionService instance
+        matching_service: Optional MatchingService instance
+
+    Note:
+        This function is designed to be run as a FastAPI BackgroundTask.
+        Errors are caught and logged, with session status updated to 'failed'.
+    """
+    temp_dir = Path(tempfile.gettempdir()) / f"credit-card-session-{session_id}"
+
+    try:
+        logger.info(f"Starting background processing for session {session_id}")
+
+        # Initialize progress tracker in extraction service
+        await extraction_service.initialize_progress_tracker(session_id)
+
+        # Phase 1: Extraction with progress tracking
+        logger.info(f"Starting extraction phase for session {session_id}")
+        await extraction_service.process_session_files_with_progress(
+            session_id, temp_dir
+        )
+
+        # Phase 2: Matching (if matching service provided)
+        if matching_service:
+            logger.info(f"Starting matching phase for session {session_id}")
+            # TODO: Implement matching with progress tracking
+            # For now, matching service doesn't have progress tracking integrated
+            # This will be added in future iterations
+            pass
+
+        # Mark session as completed
+        await extraction_service.session_repo.update_session_status(
+            session_id, "completed"
+        )
+
+        # Update final progress state
+        if extraction_service.progress_tracker:
+            await extraction_service.progress_tracker.update_progress(
+                current_phase="completed",
+                phase_details={
+                    "status": "completed",
+                    "percentage": 100
+                },
+                force_update=True
+            )
+            await extraction_service.progress_tracker.flush_pending()
+
+        logger.info(f"Processing completed successfully for session {session_id}")
+
+    except Exception as e:
+        logger.error(
+            f"Background processing failed for session {session_id}: {type(e).__name__}: {str(e)}",
+            exc_info=True
+        )
+
+        # Mark session as failed
+        try:
+            await extraction_service.session_repo.update_session_status(
+                session_id, "failed"
+            )
+
+            # Update progress with error
+            if extraction_service.progress_tracker:
+                from ..schemas.phase_progress import ErrorContext
+                error_context = ErrorContext(
+                    type=type(e).__name__,
+                    message=str(e),
+                    context={"session_id": str(session_id)},
+                    timestamp=datetime.utcnow()
+                )
+                await extraction_service.progress_tracker.update_progress(
+                    current_phase="processing",
+                    phase_details={
+                        "status": "failed",
+                        "error": error_context
+                    },
+                    force_update=True
+                )
+                await extraction_service.progress_tracker.flush_pending()
+        except Exception as cleanup_error:
+            logger.error(
+                f"Failed to update session status after error: {cleanup_error}",
+                exc_info=True
+            )
+
+    finally:
+        # Always clean up temp files
+        try:
+            if temp_dir.exists():
+                for file_path in temp_dir.iterdir():
+                    if file_path.is_file():
+                        file_path.unlink()
+                temp_dir.rmdir()
+                logger.info(f"Cleaned up temp files for session {session_id}")
+        except Exception as cleanup_error:
+            logger.error(
+                f"Failed to cleanup temp files for session {session_id}: {cleanup_error}",
+                exc_info=True
+            )

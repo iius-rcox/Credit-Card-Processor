@@ -21,6 +21,7 @@ from uuid import UUID
 # from PIL import Image
 
 from ..repositories.employee_repository import EmployeeRepository
+from ..repositories.progress_repository import ProgressRepository
 from ..repositories.receipt_repository import ReceiptRepository
 from ..repositories.transaction_repository import TransactionRepository
 from ..repositories.session_repository import SessionRepository
@@ -42,7 +43,7 @@ class ExtractionService:
         employee_repo: EmployeeRepository,
         transaction_repo: TransactionRepository,
         receipt_repo: ReceiptRepository,
-        progress_tracker: Optional[ProgressTracker] = None
+        progress_repo: Optional[ProgressRepository] = None
     ):
         """
         Initialize extraction service.
@@ -52,13 +53,14 @@ class ExtractionService:
             employee_repo: EmployeeRepository instance
             transaction_repo: TransactionRepository instance
             receipt_repo: ReceiptRepository instance
-            progress_tracker: Optional ProgressTracker for tracking extraction progress
+            progress_repo: Optional ProgressRepository for tracking extraction progress
         """
         self.session_repo = session_repo
         self.employee_repo = employee_repo
         self.transaction_repo = transaction_repo
         self.receipt_repo = receipt_repo
-        self.progress_tracker = progress_tracker
+        self.progress_repo = progress_repo
+        self.progress_tracker: Optional[ProgressTracker] = None
         self.progress_calculator = ProgressCalculator()
 
     async def extract_employees(self, pdf_path: Path) -> List[Dict]:
@@ -375,6 +377,19 @@ class ExtractionService:
             await self.session_repo.update_session_status(session_id, "failed")
             raise
 
+    async def initialize_progress_tracker(self, session_id: UUID) -> None:
+        """
+        Initialize progress tracker for this extraction service.
+
+        Args:
+            session_id: UUID of the session
+        """
+        if self.progress_repo:
+            async def update_callback(sid: UUID, progress):
+                await self.progress_repo.update_session_progress(sid, progress)
+
+            self.progress_tracker = ProgressTracker(session_id, update_callback)
+
     async def process_session_files_with_progress(
         self, session_id: UUID, temp_dir: Path
     ) -> None:
@@ -390,6 +405,10 @@ class ExtractionService:
             progress tracking updates at the page level for PDFs.
         """
         try:
+            # Initialize progress tracker if not already done
+            if not self.progress_tracker and self.progress_repo:
+                await self.initialize_progress_tracker(session_id)
+
             # Get all PDF files in temp directory
             pdf_files = list(temp_dir.glob("*.pdf"))
             total_files = len(pdf_files)

@@ -6,11 +6,13 @@ POST /api/upload - Upload PDF files and create a reconciliation session.
 
 from typing import List
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
 
-from ..dependencies import get_upload_service
+from ..dependencies import get_upload_service, get_extraction_service, get_matching_service
 from ..schemas import SessionResponse
-from ...services.upload_service import UploadService
+from ...services.upload_service import UploadService, process_session_background
+from ...services.extraction_service import ExtractionService
+from ...services.matching_service import MatchingService
 
 
 router = APIRouter(tags=["upload"])
@@ -42,15 +44,21 @@ router = APIRouter(tags=["upload"])
     """
 )
 async def upload_files(
+    background_tasks: BackgroundTasks,
     files: List[UploadFile] = File(..., description="List of PDF files to upload"),
-    upload_service: UploadService = Depends(get_upload_service)
+    upload_service: UploadService = Depends(get_upload_service),
+    extraction_service: ExtractionService = Depends(get_extraction_service),
+    matching_service: MatchingService = Depends(get_matching_service)
 ) -> SessionResponse:
     """
     Upload PDF files and create reconciliation session.
 
     Args:
+        background_tasks: FastAPI BackgroundTasks for async processing
         files: List of uploaded PDF files
         upload_service: Injected UploadService instance
+        extraction_service: Injected ExtractionService instance
+        matching_service: Injected MatchingService instance
 
     Returns:
         SessionResponse with session ID and initial status
@@ -62,6 +70,14 @@ async def upload_files(
     try:
         # Process upload (validation + session creation)
         session = await upload_service.process_upload(files)
+
+        # Add background task to process the files
+        background_tasks.add_task(
+            process_session_background,
+            session.id,
+            extraction_service,
+            matching_service
+        )
 
         return SessionResponse.model_validate(session)
 
