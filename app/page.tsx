@@ -15,8 +15,8 @@ import { ProgressDisplay } from "@/components/progress-display";
 import { ResultsPanel } from "@/components/results-panel";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { getSession as getSessionFromStorage, clearSession } from "@/lib/session-storage";
-import { getSession, getReports } from "@/lib/api-client";
-import type { SessionResponse, ReportsResponse } from "@/lib/types";
+import { getSessionDetail, downloadReport } from "@/lib/api-client";
+import type { SessionDetail } from "@/lib/api-client";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 
@@ -25,8 +25,7 @@ type AppStep = "upload" | "processing" | "results";
 export default function Home() {
   const [currentStep, setCurrentStep] = useState<AppStep>("upload");
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [sessionData, setSessionData] = useState<SessionResponse | null>(null);
-  const [reportsData, setReportsData] = useState<ReportsResponse | null>(null);
+  const [sessionData, setSessionData] = useState<SessionDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isRestoring, setIsRestoring] = useState(true);
 
@@ -45,23 +44,20 @@ export default function Home() {
   const restoreSession = async (sessionId: string) => {
     try {
       // Fetch session data
-      const session = await getSession(sessionId);
+      const session = await getSessionDetail(sessionId);
 
       setSessionId(sessionId);
       setSessionData(session);
 
       // Check if processing is complete
-      if (session.processing_status === "complete") {
-        // Fetch reports
-        const reports = await getReports(sessionId);
-        setReportsData(reports);
+      if (session.status === "completed") {
         setCurrentStep("results");
-      } else if (session.processing_status === "processing") {
+      } else if (session.status === "processing") {
         // Resume processing
         setCurrentStep("processing");
-      } else if (session.processing_status === "pending") {
-        // Ready to process
-        setCurrentStep("processing");
+      } else if (session.status === "failed") {
+        setError("Session processing failed");
+        setCurrentStep("upload");
       }
     } catch (err) {
       // Session not found or error - clear and start fresh
@@ -80,12 +76,9 @@ export default function Home() {
     if (!sessionId) return;
 
     try {
-      // Fetch session and reports data
-      const session = await getSession(sessionId);
-      const reports = await getReports(sessionId);
-
+      // Fetch session data
+      const session = await getSessionDetail(sessionId);
       setSessionData(session);
-      setReportsData(reports);
       setCurrentStep("results");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load results");
@@ -96,7 +89,7 @@ export default function Home() {
     setError(errorMsg);
     // Still try to show partial results
     if (sessionId) {
-      getSession(sessionId)
+      getSessionDetail(sessionId)
         .then((session) => {
           setSessionData(session);
           // Partial results might be available
@@ -107,15 +100,33 @@ export default function Home() {
     }
   };
 
-  const handleDownloadExcel = () => {
-    if (reportsData?.excel_report) {
-      window.open(reportsData.excel_report.url, "_blank");
+  const handleDownloadExcel = async () => {
+    if (!sessionId) return;
+    try {
+      const blob = await downloadReport(sessionId, 'xlsx');
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `reconciliation_${sessionId}.xlsx`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to download Excel report");
     }
   };
 
-  const handleDownloadCSV = () => {
-    if (reportsData?.csv_export) {
-      window.open(reportsData.csv_export.url, "_blank");
+  const handleDownloadCSV = async () => {
+    if (!sessionId) return;
+    try {
+      const blob = await downloadReport(sessionId, 'csv');
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `reconciliation_${sessionId}.csv`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to download CSV report");
     }
   };
 
@@ -130,7 +141,6 @@ export default function Home() {
     clearSession();
     setSessionId(null);
     setSessionData(null);
-    setReportsData(null);
     setError(null);
     setCurrentStep("upload");
   };
@@ -190,9 +200,6 @@ export default function Home() {
             <Alert variant="destructive" className="mb-6 max-w-2xl mx-auto">
               <AlertDescription>
                 {error}
-                {sessionData && sessionData.error_message && (
-                  <div className="mt-2 text-sm">Details: {sessionData.error_message}</div>
-                )}
               </AlertDescription>
             </Alert>
           )}
@@ -210,10 +217,9 @@ export default function Home() {
           )}
 
           {/* Step 3: Results */}
-          {currentStep === "results" && sessionData && reportsData && (
+          {currentStep === "results" && sessionData && (
             <ResultsPanel
               sessionData={sessionData}
-              reportsData={reportsData}
               onDownloadExcel={handleDownloadExcel}
               onDownloadCSV={handleDownloadCSV}
               onUploadNewReceipts={handleUploadNewReceipts}

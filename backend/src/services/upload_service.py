@@ -26,7 +26,7 @@ class UploadService:
     """
 
     MAX_FILE_COUNT = 100
-    MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB in bytes
+    MAX_FILE_SIZE = 300 * 1024 * 1024  # 300MB in bytes
     ALLOWED_MIME_TYPES = ["application/pdf"]
 
     def __init__(self, session_repo: SessionRepository):

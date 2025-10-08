@@ -28,7 +28,7 @@ spec:
 
       containers:
       - name: frontend
-        image: iiusacr.azurecr.io/expense-frontend:v1.0.0
+        image: iiusacr.azurecr.io/expense-frontend:v1.0.4
         imagePullPolicy: Always
         ports:
         - containerPort: 3000
@@ -37,9 +37,12 @@ spec:
 
         # Environment variables
         env:
-        # Backend API URL (internal cluster service)
+        # Backend service URL for Next.js rewrites
+        - name: BACKEND_URL
+          value: "http://backend-service:8000"
+        # Backend API URL (empty for relative paths through ingress)
         - name: NEXT_PUBLIC_API_URL
-          value: http://backend-service:8000
+          value: ""
         # Next.js production mode
         - name: NODE_ENV
           value: production

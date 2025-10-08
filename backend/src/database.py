@@ -6,6 +6,7 @@ with asyncpg driver for PostgreSQL.
 """
 
 from typing import AsyncGenerator
+from urllib.parse import quote_plus
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
@@ -14,13 +15,14 @@ from .config import settings
 
 
 # Construct database URL from individual parameters
-# Workaround for asyncpg DNS resolution issue in Kubernetes
+# URL-encode password to handle special characters like @ in passwords
 database_url = (
-    f"postgresql+asyncpg://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD}"
+    f"postgresql+asyncpg://{settings.POSTGRES_USER}:{quote_plus(settings.POSTGRES_PASSWORD)}"
     f"@{settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}"
 )
 
 # Create async engine
+# Add connect_args for asyncpg to handle Kubernetes DNS properly
 engine = create_async_engine(
     database_url,
     echo=settings.ENVIRONMENT == "development",  # Log SQL in development
@@ -28,6 +30,9 @@ engine = create_async_engine(
     max_overflow=10,
     pool_pre_ping=True,  # Verify connections before using
     poolclass=NullPool if settings.ENVIRONMENT == "test" else None,  # Disable pooling in tests
+    connect_args={
+        "server_settings": {"jit": "off"},  # Disable JIT for compatibility
+    }
 )
 
 # Create session factory

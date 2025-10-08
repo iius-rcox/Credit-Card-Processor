@@ -27,7 +27,7 @@ router = APIRouter(tags=["upload"])
     **Requirements:**
     - Files must be PDF format
     - Maximum 100 files per upload
-    - Maximum 10MB per file
+    - Maximum 300MB per file
 
     **Process:**
     1. Files are validated and saved to temporary storage

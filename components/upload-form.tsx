@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { uploadPDFs } from "@/lib/api-client";
+import { uploadFiles } from "@/lib/api-client";
 import { initializeSessionStorage, createNewSession } from "@/lib/session-storage";
 
 interface UploadFormProps {
@@ -40,18 +40,19 @@ export function UploadForm({ onUploadComplete }: UploadFormProps) {
     setIsUploading(true);
 
     try {
-      // Call API
-      const response = await uploadPDFs(creditCardFile, expenseReportFile);
+      // Call API with new uploadFiles function that matches backend
+      const files = [creditCardFile, expenseReportFile];
+      const session = await uploadFiles(files);
 
       // Save session to localStorage
       const storage = initializeSessionStorage();
-      const { sessionId } = createNewSession(storage, `Session ${new Date().toLocaleDateString()}`, response.session_id);
+      const { sessionId } = createNewSession(storage, `Session ${new Date().toLocaleDateString()}`, session.id);
 
       // Show success
-      setSuccessMessage(`Files uploaded successfully! Session ID: ${response.session_id}`);
+      setSuccessMessage(`Files uploaded successfully! Session ID: ${session.id}`);
 
       // Notify parent component
-      onUploadComplete(response.session_id);
+      onUploadComplete(session.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
