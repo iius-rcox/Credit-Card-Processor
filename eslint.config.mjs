@@ -20,6 +20,11 @@ const eslintConfig = [...compat.extends("next/core-web-vitals", "next/typescript
     "build/**",
     "next-env.d.ts",
   ],
+  rules: {
+    // React Hooks rules for progress tracking feature
+    "react-hooks/rules-of-hooks": "error",
+    "react-hooks/exhaustive-deps": "warn",
+  },
 }, ...storybook.configs["flat/recommended"]];
 
 export default eslintConfig;

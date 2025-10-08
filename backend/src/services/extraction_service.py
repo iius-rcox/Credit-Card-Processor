@@ -24,6 +24,8 @@ from ..repositories.employee_repository import EmployeeRepository
 from ..repositories.receipt_repository import ReceiptRepository
 from ..repositories.transaction_repository import TransactionRepository
 from ..repositories.session_repository import SessionRepository
+from .progress_tracker import ProgressTracker
+from .progress_calculator import ProgressCalculator
 
 
 class ExtractionService:
@@ -39,7 +41,8 @@ class ExtractionService:
         session_repo: SessionRepository,
         employee_repo: EmployeeRepository,
         transaction_repo: TransactionRepository,
-        receipt_repo: ReceiptRepository
+        receipt_repo: ReceiptRepository,
+        progress_tracker: Optional[ProgressTracker] = None
     ):
         """
         Initialize extraction service.
@@ -49,11 +52,14 @@ class ExtractionService:
             employee_repo: EmployeeRepository instance
             transaction_repo: TransactionRepository instance
             receipt_repo: ReceiptRepository instance
+            progress_tracker: Optional ProgressTracker for tracking extraction progress
         """
         self.session_repo = session_repo
         self.employee_repo = employee_repo
         self.transaction_repo = transaction_repo
         self.receipt_repo = receipt_repo
+        self.progress_tracker = progress_tracker
+        self.progress_calculator = ProgressCalculator()
 
     async def extract_employees(self, pdf_path: Path) -> List[Dict]:
         """
@@ -368,3 +374,150 @@ class ExtractionService:
             # Update session status to failed
             await self.session_repo.update_session_status(session_id, "failed")
             raise
+
+    async def process_session_files_with_progress(
+        self, session_id: UUID, temp_dir: Path
+    ) -> None:
+        """
+        Process all files for a session with progress tracking.
+
+        Args:
+            session_id: UUID of the session
+            temp_dir: Path to temporary directory containing uploaded files
+
+        Note:
+            This method is similar to process_session_files but includes
+            progress tracking updates at the page level for PDFs.
+        """
+        try:
+            # Get all PDF files in temp directory
+            pdf_files = list(temp_dir.glob("*.pdf"))
+            total_files = len(pdf_files)
+
+            if total_files == 0:
+                return
+
+            # Report processing phase starting
+            if self.progress_tracker:
+                await self.progress_tracker.update_progress(
+                    current_phase="processing",
+                    phase_details={
+                        "status": "in_progress",
+                        "percentage": 0,
+                        "total_files": total_files,
+                        "current_file_index": 0,
+                        "started_at": datetime.utcnow()
+                    },
+                    force_update=True
+                )
+
+            # Process each file with progress tracking
+            for file_index, pdf_file in enumerate(pdf_files, 1):
+                await self._process_pdf_with_progress(
+                    pdf_file=pdf_file,
+                    session_id=session_id,
+                    file_index=file_index,
+                    total_files=total_files
+                )
+
+            # Mark processing phase as complete
+            if self.progress_tracker:
+                await self.progress_tracker.update_progress(
+                    current_phase="processing",
+                    phase_details={
+                        "status": "completed",
+                        "percentage": 100,
+                        "total_files": total_files,
+                        "completed_at": datetime.utcnow()
+                    },
+                    force_update=True
+                )
+
+            # Update session counts
+            await self.session_repo.update_session_counts(session_id)
+
+            # Update status to matching (next phase)
+            await self.session_repo.update_session_status(session_id, "matching")
+
+        except Exception as e:
+            # Report error in progress
+            if self.progress_tracker:
+                from ..schemas.phase_progress import ErrorContext
+                error_context = ErrorContext(
+                    type=type(e).__name__,
+                    message=str(e),
+                    context={
+                        "phase": "processing",
+                        "session_id": str(session_id)
+                    },
+                    timestamp=datetime.utcnow()
+                )
+                await self.progress_tracker.update_progress(
+                    current_phase="processing",
+                    phase_details={
+                        "status": "failed",
+                        "error": error_context
+                    },
+                    force_update=True
+                )
+
+            # Update session status to failed
+            await self.session_repo.update_session_status(session_id, "failed")
+            raise
+
+    async def _process_pdf_with_progress(
+        self,
+        pdf_file: Path,
+        session_id: UUID,
+        file_index: int,
+        total_files: int
+    ) -> None:
+        """
+        Process a single PDF file with page-level progress tracking.
+
+        Args:
+            pdf_file: Path to the PDF file
+            session_id: UUID of the session
+            file_index: Current file index (1-based)
+            total_files: Total number of files being processed
+        """
+        # TODO: When real PDF processing is implemented with pdfplumber:
+        # 1. Open PDF and get total pages: len(pdf.pages)
+        # 2. Iterate through pages
+        # 3. Update progress for each page
+        # 4. Extract data from pages
+
+        # Placeholder implementation showing progress tracking pattern
+        total_pages = 10  # Placeholder - would be from PDF metadata
+
+        for page_num in range(1, total_pages + 1):
+            # Simulate page processing
+            # In real implementation, this is where you'd extract text from the page
+
+            if self.progress_tracker:
+                # Calculate progress percentages
+                file_progress = self.progress_calculator.calculate_file_progress(
+                    page_num, total_pages
+                )
+                overall_progress = self.progress_calculator.calculate_multi_file_progress(
+                    file_index, total_files, page_num, total_pages
+                )
+
+                # Update progress
+                await self.progress_tracker.update_progress(
+                    current_phase="processing",
+                    phase_details={
+                        "status": "in_progress",
+                        "percentage": int(overall_progress),
+                        "total_files": total_files,
+                        "current_file_index": file_index,
+                        "current_file": {
+                            "name": pdf_file.name,
+                            "total_pages": total_pages,
+                            "current_page": page_num,
+                            "regex_matches_found": page_num * 5,  # Placeholder
+                            "started_at": datetime.utcnow()
+                        }
+                    },
+                    force_update=(page_num == 1 or page_num == total_pages)
+                )

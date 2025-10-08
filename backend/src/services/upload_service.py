@@ -7,14 +7,19 @@ storage, and session creation.
 
 import os
 import tempfile
+from datetime import datetime
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 from uuid import UUID
 
 from fastapi import HTTPException, UploadFile
 
 from ..models.session import Session
 from ..repositories.session_repository import SessionRepository
+from ..repositories.progress_repository import ProgressRepository
+from ..schemas.processing_progress import ProcessingProgress
+from ..schemas.phase_progress import PhaseProgress
+from .progress_tracker import ProgressTracker
 
 
 class UploadService:
@@ -29,14 +34,16 @@ class UploadService:
     MAX_FILE_SIZE = 300 * 1024 * 1024  # 300MB in bytes
     ALLOWED_MIME_TYPES = ["application/pdf"]
 
-    def __init__(self, session_repo: SessionRepository):
+    def __init__(self, session_repo: SessionRepository, progress_repo: Optional[ProgressRepository] = None):
         """
         Initialize upload service.
 
         Args:
             session_repo: SessionRepository instance
+            progress_repo: Optional ProgressRepository for progress tracking
         """
         self.session_repo = session_repo
+        self.progress_repo = progress_repo
 
     async def process_upload(
         self, files: List[UploadFile]
@@ -81,8 +88,12 @@ class UploadService:
             "upload_count": len(validated_files)
         })
 
-        # Save files to temporary storage
-        temp_dir = await self._save_files_to_temp(session.id, validated_files)
+        # Initialize progress tracking for upload phase
+        if self.progress_repo:
+            await self._init_upload_progress(session.id, len(validated_files))
+
+        # Save files to temporary storage with progress tracking
+        temp_dir = await self._save_files_to_temp_with_progress(session.id, validated_files)
 
         # TODO: Dispatch background task for extraction
         # This would typically be done with Celery, Redis Queue, or FastAPI BackgroundTasks
@@ -197,6 +208,192 @@ class UploadService:
             filename = name[:195] + ext
 
         return filename
+
+    async def _init_upload_progress(self, session_id: UUID, file_count: int) -> None:
+        """
+        Initialize progress tracking for upload phase.
+
+        Args:
+            session_id: UUID of the session
+            file_count: Number of files being uploaded
+        """
+        progress = ProcessingProgress(
+            overall_percentage=0,
+            current_phase="upload",
+            phases={
+                "upload": PhaseProgress(
+                    status="in_progress",
+                    percentage=0,
+                    started_at=datetime.utcnow(),
+                    files_uploaded=0,
+                    bytes_uploaded=0
+                ),
+                "processing": PhaseProgress(
+                    status="pending",
+                    percentage=0,
+                    total_files=file_count
+                ),
+                "matching": PhaseProgress(
+                    status="pending",
+                    percentage=0
+                ),
+                "report_generation": PhaseProgress(
+                    status="pending",
+                    percentage=0
+                )
+            },
+            last_update=datetime.utcnow(),
+            status_message=f"Starting upload of {file_count} file(s)..."
+        )
+
+        await self.progress_repo.update_session_progress(session_id, progress)
+
+    async def _save_files_to_temp_with_progress(
+        self, session_id: UUID, files: List[UploadFile]
+    ) -> Path:
+        """
+        Save uploaded files to temporary storage with progress tracking.
+
+        Args:
+            session_id: UUID of the session
+            files: List of validated upload files
+
+        Returns:
+            Path to temporary directory containing saved files
+        """
+        # Create temporary directory for this session
+        temp_dir = Path(tempfile.gettempdir()) / f"credit-card-session-{session_id}"
+        temp_dir.mkdir(parents=True, exist_ok=True)
+
+        total_files = len(files)
+        total_bytes_uploaded = 0
+
+        # Save each file with progress updates
+        for idx, file in enumerate(files):
+            # Generate safe filename
+            safe_filename = f"{idx:04d}_{self._sanitize_filename(file.filename)}"
+            file_path = temp_dir / safe_filename
+
+            # Write file content
+            content = await file.read()
+            file_size = len(content)
+            with open(file_path, "wb") as f:
+                f.write(content)
+
+            # Reset file pointer
+            await file.seek(0)
+
+            # Update progress
+            total_bytes_uploaded += file_size
+            if self.progress_repo:
+                await self._update_upload_progress(
+                    session_id,
+                    files_uploaded=idx + 1,
+                    total_files=total_files,
+                    bytes_uploaded=total_bytes_uploaded,
+                    current_filename=file.filename or f"file_{idx}"
+                )
+
+        # Mark upload phase as complete
+        if self.progress_repo:
+            await self._complete_upload_progress(session_id, total_files, total_bytes_uploaded)
+
+        return temp_dir
+
+    async def _update_upload_progress(
+        self,
+        session_id: UUID,
+        files_uploaded: int,
+        total_files: int,
+        bytes_uploaded: int,
+        current_filename: str
+    ) -> None:
+        """
+        Update progress during file upload.
+
+        Args:
+            session_id: Session ID
+            files_uploaded: Number of files uploaded so far
+            total_files: Total number of files to upload
+            bytes_uploaded: Total bytes uploaded
+            current_filename: Name of the current file
+        """
+        percentage = int((files_uploaded / total_files) * 100)
+
+        progress = ProcessingProgress(
+            overall_percentage=int(percentage * 0.1),  # Upload is 10% of overall
+            current_phase="upload",
+            phases={
+                "upload": PhaseProgress(
+                    status="in_progress",
+                    percentage=percentage,
+                    files_uploaded=files_uploaded,
+                    bytes_uploaded=bytes_uploaded
+                ),
+                "processing": PhaseProgress(
+                    status="pending",
+                    percentage=0,
+                    total_files=total_files
+                ),
+                "matching": PhaseProgress(
+                    status="pending",
+                    percentage=0
+                ),
+                "report_generation": PhaseProgress(
+                    status="pending",
+                    percentage=0
+                )
+            },
+            last_update=datetime.utcnow(),
+            status_message=f"Uploading file {files_uploaded}/{total_files}: {current_filename}"
+        )
+
+        await self.progress_repo.update_session_progress(session_id, progress)
+
+    async def _complete_upload_progress(
+        self,
+        session_id: UUID,
+        total_files: int,
+        total_bytes: int
+    ) -> None:
+        """
+        Mark upload phase as complete.
+
+        Args:
+            session_id: Session ID
+            total_files: Total number of files uploaded
+            total_bytes: Total bytes uploaded
+        """
+        progress = ProcessingProgress(
+            overall_percentage=10,  # Upload complete = 10% overall
+            current_phase="upload",
+            phases={
+                "upload": PhaseProgress(
+                    status="completed",
+                    percentage=100,
+                    completed_at=datetime.utcnow(),
+                    files_uploaded=total_files,
+                    bytes_uploaded=total_bytes
+                ),
+                "processing": PhaseProgress(
+                    status="pending",
+                    percentage=0,
+                    total_files=total_files
+                ),
+                "matching": PhaseProgress(
+                    status="pending",
+                    percentage=0
+                ),
+                "report_generation": PhaseProgress(
+                    status="pending",
+                    percentage=0
+                )
+            },
+            last_update=datetime.utcnow(),
+            status_message=f"Upload complete. {total_files} file(s) uploaded successfully."
+        )
+
+        await self.progress_repo.update_session_progress(session_id, progress)
 
     async def get_upload_temp_path(self, session_id: UUID) -> Path:
         """

@@ -1,0 +1,326 @@
+openapi: 3.0.3
+info:
+  title: Progress Tracking API
+  description: API for tracking PDF processing progress with page-level granularity
+  version: 1.0.0
+  contact:
+    name: Feature 006 - Better Status Updates
+
+servers:
+  - url: http://localhost:8000/api
+    description: Local development server
+
+paths:
+  /sessions/{session_id}/progress:
+    get:
+      summary: Get current processing progress for a session
+      description: |
+        Returns the current progress state for a session, including:
+        - Overall progress percentage
+        - Current processing phase
+        - Per-file progress details
+        - Page-level counters
+
+        This endpoint is designed for polling every 2-3 seconds from the frontend.
+      operationId: getProgress
+      tags:
+        - Progress
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          description: UUID of the session to get progress for
+          schema:
+            type: string
+            format: uuid
+            example: "550e8400-e29b-41d4-a716-446655440000"
+      responses:
+        '200':
+          description: Progress snapshot retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgressResponse'
+              examples:
+                processing:
+                  summary: Session actively processing
+                  value:
+                    session_id: "550e8400-e29b-41d4-a716-446655440000"
+                    current_phase: "processing"
+                    overall_percentage: 45
+                    phase_details:
+                      upload:
+                        status: "completed"
+                        percentage: 100
+                        completed_at: "2025-10-08T14:23:15Z"
+                      processing:
+                        status: "in_progress"
+                        percentage: 35
+                        total_files: 3
+                        current_file_index: 2
+                        current_file:
+                          name: "statement_002.pdf"
+                          total_pages: 12
+                          current_page: 5
+                          regex_matches_found: 23
+                      matching:
+                        status: "pending"
+                        percentage: 0
+                    last_update: "2025-10-08T14:25:42Z"
+                    status_message: "Processing File 2 of 3: Page 5/12"
+                completed:
+                  summary: Session processing complete
+                  value:
+                    session_id: "550e8400-e29b-41d4-a716-446655440000"
+                    current_phase: "completed"
+                    overall_percentage: 100
+                    phase_details: null
+                    last_update: "2025-10-08T14:30:00Z"
+                    status_message: "Processing complete"
+                failed:
+                  summary: Session processing failed
+                  value:
+                    session_id: "550e8400-e29b-41d4-a716-446655440000"
+                    current_phase: "failed"
+                    overall_percentage: 32
+                    phase_details:
+                      processing:
+                        status: "failed"
+                        percentage: 35
+                    error:
+                      type: "RegexExtractionError"
+                      message: "Invalid regex pattern in transaction extraction"
+                      context:
+                        phase: "processing"
+                        file: "statement_002.pdf"
+                        page: 5
+                      timestamp: "2025-10-08T14:27:00Z"
+                    last_update: "2025-10-08T14:27:00Z"
+                    status_message: "Failed during file processing"
+        '404':
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: "Session not found"
+                detail: "No session exists with ID 550e8400-e29b-41d4-a716-446655440000"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /sessions/{session_id}/progress/stream:
+    get:
+      summary: Stream processing progress updates (SSE)
+      description: |
+        Server-Sent Events (SSE) endpoint for real-time progress updates.
+
+        The client should use EventSource API to connect:
+        ```javascript
+        const eventSource = new EventSource('/api/sessions/{id}/progress/stream');
+        eventSource.onmessage = (event) => {
+          const progress = JSON.parse(event.data);
+          // Update UI
+        };
+        ```
+
+        Events are sent:
+        - Every 2-3 seconds during active processing
+        - Immediately on phase transitions
+        - On completion or failure
+
+        **Note**: This endpoint is for Phase 2 enhancement. Phase 1 uses polling.
+      operationId: streamProgress
+      tags:
+        - Progress
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          description: UUID of the session to stream progress for
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: SSE stream established
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: |
+                  SSE events with format:
+                  ```
+                  event: progress
+                  data: {"session_id": "...", "overall_percentage": 45, ...}
+
+                  event: complete
+                  data: {"session_id": "...", "overall_percentage": 100}
+
+                  event: error
+                  data: {"session_id": "...", "error": {...}}
+                  ```
+        '404':
+          description: Session not found
+        '500':
+          description: Internal server error
+
+components:
+  schemas:
+    ProgressResponse:
+      type: object
+      required:
+        - session_id
+        - current_phase
+        - overall_percentage
+        - last_update
+        - status_message
+      properties:
+        session_id:
+          type: string
+          format: uuid
+          description: Session identifier
+        current_phase:
+          type: string
+          enum: [upload, processing, matching, report_generation, completed, failed]
+          description: Current processing phase
+        overall_percentage:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Aggregate progress across all phases
+        phase_details:
+          type: object
+          nullable: true
+          description: Detailed progress per phase (null if completed or not started)
+          additionalProperties:
+            $ref: '#/components/schemas/PhaseProgress'
+        error:
+          $ref: '#/components/schemas/ErrorContext'
+          nullable: true
+        last_update:
+          type: string
+          format: date-time
+          description: Timestamp of last progress update
+        status_message:
+          type: string
+          description: Human-readable status message
+          example: "Processing File 2 of 3: Page 5/12"
+
+    PhaseProgress:
+      type: object
+      required:
+        - status
+        - percentage
+      properties:
+        status:
+          type: string
+          enum: [pending, in_progress, completed, failed]
+        percentage:
+          type: integer
+          minimum: 0
+          maximum: 100
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        total_files:
+          type: integer
+          nullable: true
+          description: Total files to process (processing phase only)
+        current_file_index:
+          type: integer
+          nullable: true
+          description: Index of currently processing file (processing phase only)
+        current_file:
+          $ref: '#/components/schemas/FileProgress'
+          nullable: true
+
+    FileProgress:
+      type: object
+      required:
+        - name
+        - total_pages
+        - current_page
+        - regex_matches_found
+      properties:
+        name:
+          type: string
+          description: Filename
+          example: "statement_002.pdf"
+        total_pages:
+          type: integer
+          minimum: 1
+          description: Total page count from PDF metadata
+        current_page:
+          type: integer
+          minimum: 1
+          description: Currently processing page number
+        regex_matches_found:
+          type: integer
+          minimum: 0
+          description: Count of regex matches extracted so far
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    ErrorContext:
+      type: object
+      required:
+        - type
+        - message
+        - context
+        - timestamp
+      properties:
+        type:
+          type: string
+          description: Error class name
+          example: "RegexExtractionError"
+        message:
+          type: string
+          description: Human-readable error message
+        context:
+          type: object
+          description: Error location details
+          required:
+            - phase
+          properties:
+            phase:
+              type: string
+              description: Phase where error occurred
+            file:
+              type: string
+              nullable: true
+              description: Filename where error occurred
+            page:
+              type: integer
+              nullable: true
+              description: Page number where error occurred
+        timestamp:
+          type: string
+          format: date-time
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Error message
+        detail:
+          type: string
+          nullable: true
+          description: Additional error details

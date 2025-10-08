@@ -11,7 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sess
 from httpx import AsyncClient
 
 from src.main import app
-from src.database import Base, get_db
+from src.database import get_db
+from src.models.session import Base
 from src.config import settings
 
 
