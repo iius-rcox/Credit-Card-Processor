@@ -91,7 +91,8 @@ class ProgressRepository:
         """
         try:
             # Convert ProcessingProgress to dict for JSONB storage
-            progress_dict = progress.dict()
+            # Use model_dump with mode='json' to properly serialize datetime objects
+            progress_dict = progress.model_dump(mode='json')
 
             # Update session with progress data and cached fields
             stmt = (
