@@ -4,13 +4,14 @@ Upload API endpoint.
 POST /api/upload - Upload PDF files and create a reconciliation session.
 """
 
+import asyncio
 from typing import List
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
 from ..dependencies import get_upload_service
 from ..schemas import SessionResponse
-from ...services.upload_service import UploadService, process_session_background_sync
+from ...services.upload_service import UploadService, process_session_background
 
 
 router = APIRouter(tags=["upload"])
@@ -42,7 +43,6 @@ router = APIRouter(tags=["upload"])
     """
 )
 async def upload_files(
-    background_tasks: BackgroundTasks,
     files: List[UploadFile] = File(..., description="List of PDF files to upload"),
     upload_service: UploadService = Depends(get_upload_service)
 ) -> SessionResponse:
@@ -50,7 +50,6 @@ async def upload_files(
     Upload PDF files and create reconciliation session.
 
     Args:
-        background_tasks: FastAPI BackgroundTasks for async processing
         files: List of uploaded PDF files
         upload_service: Injected UploadService instance
 
@@ -65,14 +64,9 @@ async def upload_files(
         # Process upload (validation + session creation)
         session = await upload_service.process_upload(files)
 
-        # Add background task to process the files
-        # Note: We only pass the session_id, not the services, because
-        # the services contain DB sessions tied to this request context
-        # We use the sync wrapper because FastAPI BackgroundTasks requires sync functions
-        background_tasks.add_task(
-            process_session_background_sync,
-            session.id
-        )
+        # Start background processing using asyncio.create_task
+        # This runs in the current event loop without blocking the response
+        asyncio.create_task(process_session_background(session.id))
 
         # Convert to dict first to avoid greenlet issues with computed columns
         return SessionResponse(
