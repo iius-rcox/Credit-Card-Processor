@@ -53,6 +53,8 @@ class SessionRepository:
         self.db.add(session)
         await self.db.flush()
         await self.db.refresh(session)
+        # Explicitly access computed columns to load them before leaving async context
+        _ = session.expires_at
         return session
 
     async def get_session_by_id(self, session_id: UUID) -> Optional[Session]:
