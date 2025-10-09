@@ -41,7 +41,7 @@ class SessionRepository:
             data: Dictionary with session data (status, upload_count, etc.)
 
         Returns:
-            Created Session instance
+            Created Session instance with all attributes loaded
 
         Example:
             session = await repo.create_session({
@@ -52,10 +52,18 @@ class SessionRepository:
         session = Session(**data)
         self.db.add(session)
         await self.db.flush()
+
+        # Get the session ID before commit
+        session_id = session.id
+
         await self.db.commit()
-        await self.db.refresh(session)
-        # Explicitly access computed columns to load them into instance
-        _ = session.expires_at
+
+        # Query the session back to ensure all computed columns are loaded
+        # This is more reliable than refresh for computed columns
+        stmt = select(Session).where(Session.id == session_id)
+        result = await self.db.execute(stmt)
+        session = result.scalar_one()
+
         return session
 
     async def get_session_by_id(self, session_id: UUID) -> Optional[Session]:
