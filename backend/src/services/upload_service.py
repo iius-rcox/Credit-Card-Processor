@@ -441,11 +441,22 @@ def process_session_background_sync(session_id: UUID) -> None:
     """
     Synchronous wrapper for background task processing.
 
-    FastAPI's BackgroundTasks doesn't handle async functions properly,
-    so we need this sync wrapper that creates a new event loop.
+    FastAPI's BackgroundTasks runs in a thread pool, so we need to
+    get the current event loop or create a new one.
     """
     import asyncio
-    asyncio.run(process_session_background(session_id))
+    try:
+        # Try to get the current event loop
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # If loop is running (shouldn't happen in background thread), create task
+            asyncio.create_task(process_session_background(session_id))
+        else:
+            # Run in the existing loop
+            loop.run_until_complete(process_session_background(session_id))
+    except RuntimeError:
+        # No event loop exists, create a new one
+        asyncio.run(process_session_background(session_id))
 
 
 async def process_session_background(
