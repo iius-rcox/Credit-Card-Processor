@@ -63,17 +63,20 @@ class SessionRepository:
         result = await self.db.execute(stmt)
         session = result.scalar_one()
 
-        # Force load all computed columns into the instance state
-        # This prevents lazy loading after session closes
-        from sqlalchemy.orm import make_transient_to_detached
-        _ = session.id  # Access all attributes to load them
+        # Force load all attributes including computed columns while session is active
+        # This prevents lazy loading attempts after session closes
+        _ = session.id
         _ = session.created_at
-        _ = session.expires_at
+        _ = session.expires_at  # Computed column - must be accessed before session closes
         _ = session.updated_at
         _ = session.status
+        _ = session.upload_count
+        _ = session.total_transactions
+        _ = session.total_receipts
+        _ = session.matched_count
 
-        # Make the object detached so it doesn't try to access the DB
-        make_transient_to_detached(session)
+        # Expunge from session to prevent further DB access attempts
+        self.db.expunge(session)
 
         return session
 
