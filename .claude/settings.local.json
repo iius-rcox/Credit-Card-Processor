@@ -70,7 +70,11 @@
       "Bash(alembic revision:*)",
       "Read(//c/Users/rcox/OneDrive - INSULATIONS, INC/Documents/Cursor Projects/**)",
       "Bash(dir:*)",
-      "Bash(alembic upgrade:*)"
+      "Bash(alembic upgrade:*)",
+      "Bash(watch:*)",
+      "Bash(while true)",
+      "Bash(do kubectl exec -n credit-card-processor postgres-0 -- psql -U ccprocessor -d credit_card_db -c \"SELECT id, status, current_phase, overall_percentage, upload_count, created_at FROM sessions WHERE created_at > NOW() - INTERVAL ''5 minutes'' ORDER BY created_at DESC LIMIT 3;\")",
+      "Bash(done)"
     ],
     "deny": [],
     "ask": [
