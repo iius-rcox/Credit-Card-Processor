@@ -292,9 +292,9 @@ class SessionRepository:
                 # Mark report generation as complete if we reached that phase
                 if "report_generation" in final_progress.phases:
                     final_progress.phases["report_generation"] = PhaseProgress(
-                        status="completed" if final_phase == "completed" else "skipped",
+                        status="completed" if final_phase == "completed" else "pending",
                         percentage=100 if final_phase == "completed" else 0,
-                        completed_at=datetime.utcnow()
+                        completed_at=datetime.utcnow() if final_phase == "completed" else None
                     )
 
                 await progress_repo.update_session_progress(session_id, final_progress)
