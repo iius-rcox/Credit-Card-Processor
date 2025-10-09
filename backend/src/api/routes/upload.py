@@ -10,7 +10,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Up
 
 from ..dependencies import get_upload_service
 from ..schemas import SessionResponse
-from ...services.upload_service import UploadService, process_session_background
+from ...services.upload_service import UploadService, process_session_background_sync
 
 
 router = APIRouter(tags=["upload"])
@@ -68,8 +68,9 @@ async def upload_files(
         # Add background task to process the files
         # Note: We only pass the session_id, not the services, because
         # the services contain DB sessions tied to this request context
+        # We use the sync wrapper because FastAPI BackgroundTasks requires sync functions
         background_tasks.add_task(
-            process_session_background,
+            process_session_background_sync,
             session.id
         )
 

@@ -437,6 +437,17 @@ class UploadService:
             temp_dir.rmdir()
 
 
+def process_session_background_sync(session_id: UUID) -> None:
+    """
+    Synchronous wrapper for background task processing.
+
+    FastAPI's BackgroundTasks doesn't handle async functions properly,
+    so we need this sync wrapper that creates a new event loop.
+    """
+    import asyncio
+    asyncio.run(process_session_background(session_id))
+
+
 async def process_session_background(
     session_id: UUID
 ) -> None:
