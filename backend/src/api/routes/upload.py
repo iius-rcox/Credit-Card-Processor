@@ -4,14 +4,14 @@ Upload API endpoint.
 POST /api/upload - Upload PDF files and create a reconciliation session.
 """
 
-import asyncio
 from typing import List
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
 from ..dependencies import get_upload_service
 from ..schemas import SessionResponse
-from ...services.upload_service import UploadService, process_session_background
+from ...services.upload_service import UploadService
+from ...tasks import process_session_task
 
 
 router = APIRouter(tags=["upload"])
@@ -64,9 +64,9 @@ async def upload_files(
         # Process upload (validation + session creation)
         session = await upload_service.process_upload(files)
 
-        # Start background processing using asyncio.create_task
-        # This runs in the current event loop without blocking the response
-        asyncio.create_task(process_session_background(session.id))
+        # Queue background processing task using Celery
+        # This dispatches to Redis queue and returns immediately
+        process_session_task.delay(str(session.id))
 
         # Convert to dict first to avoid greenlet issues with computed columns
         return SessionResponse(

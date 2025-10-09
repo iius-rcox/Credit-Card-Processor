@@ -18,6 +18,10 @@ openpyxl>=3.1.0
 # Server-Sent Events
 sse-starlette>=1.6.5
 
+# Task Queue
+celery>=5.3.0
+redis>=5.0.0
+
 # Authentication (if needed)
 python-jose>=3.3.0
 
