@@ -438,105 +438,119 @@ class UploadService:
 
 
 async def process_session_background(
-    session_id: UUID,
-    extraction_service: "ExtractionService",
-    matching_service: Optional["MatchingService"] = None
+    session_id: UUID
 ) -> None:
     """
     Background task to process uploaded files through extraction and matching.
 
     This function orchestrates the entire processing workflow:
-    1. Get temp directory path
-    2. Run extraction with progress tracking
-    3. Run matching (if service provided)
-    4. Clean up temp files
-    5. Mark session as completed
+    1. Create new database session (not tied to request context)
+    2. Get temp directory path
+    3. Run extraction with progress tracking
+    4. Run matching
+    5. Clean up temp files
+    6. Mark session as completed
 
     Args:
         session_id: UUID of the session to process
-        extraction_service: ExtractionService instance
-        matching_service: Optional MatchingService instance
 
     Note:
         This function is designed to be run as a FastAPI BackgroundTask.
         Errors are caught and logged, with session status updated to 'failed'.
+        Creates its own DB session since it runs outside the request context.
     """
+    from ..database import AsyncSessionLocal
+    from ..repositories.session_repository import SessionRepository
+    from ..repositories.employee_repository import EmployeeRepository
+    from ..repositories.transaction_repository import TransactionRepository
+    from ..repositories.receipt_repository import ReceiptRepository
+    from ..repositories.match_result_repository import MatchResultRepository
+    from ..repositories.progress_repository import ProgressRepository
+    from .extraction_service import ExtractionService
+    from .matching_service import MatchingService
+
     temp_dir = Path(tempfile.gettempdir()) / f"credit-card-session-{session_id}"
 
-    try:
-        logger.info(f"Starting background processing for session {session_id}")
-
-        # Initialize progress tracker in extraction service
-        await extraction_service.initialize_progress_tracker(session_id)
-
-        # Phase 1: Extraction with progress tracking
-        logger.info(f"Starting extraction phase for session {session_id}")
-        await extraction_service.process_session_files_with_progress(
-            session_id, temp_dir
-        )
-
-        # Phase 2: Matching (if matching service provided)
-        if matching_service:
-            logger.info(f"Starting matching phase for session {session_id}")
-            # TODO: Implement matching with progress tracking
-            # For now, matching service doesn't have progress tracking integrated
-            # This will be added in future iterations
-            pass
-
-        # Mark session as completed
-        await extraction_service.session_repo.update_session_status(
-            session_id, "completed"
-        )
-
-        # Update final progress state
-        if extraction_service.progress_tracker:
-            await extraction_service.progress_tracker.update_progress(
-                current_phase="completed",
-                phase_details={
-                    "status": "completed",
-                    "percentage": 100
-                },
-                force_update=True
-            )
-            await extraction_service.progress_tracker.flush_pending()
-
-        logger.info(f"Processing completed successfully for session {session_id}")
-
-    except Exception as e:
-        logger.error(
-            f"Background processing failed for session {session_id}: {type(e).__name__}: {str(e)}",
-            exc_info=True
-        )
-
-        # Mark session as failed
+    # Create new database session for background task
+    async with AsyncSessionLocal() as db:
         try:
-            await extraction_service.session_repo.update_session_status(
-                session_id, "failed"
+            logger.info(f"Starting background processing for session {session_id}")
+
+            # Create repositories and services with the background task DB session
+            session_repo = SessionRepository(db)
+            employee_repo = EmployeeRepository(db)
+            transaction_repo = TransactionRepository(db)
+            receipt_repo = ReceiptRepository(db)
+            match_result_repo = MatchResultRepository(db)
+            progress_repo = ProgressRepository(db)
+
+            extraction_service = ExtractionService(
+                session_repo, employee_repo, transaction_repo, receipt_repo, progress_repo
+            )
+            matching_service = MatchingService(
+                session_repo, transaction_repo, receipt_repo, match_result_repo
             )
 
-            # Update progress with error
+            # Initialize progress tracker in extraction service
+            await extraction_service.initialize_progress_tracker(session_id)
+
+            # Phase 1: Extraction with progress tracking
+            logger.info(f"Starting extraction phase for session {session_id}")
+            await extraction_service.process_session_files_with_progress(
+                session_id, temp_dir
+            )
+
+            # Phase 2: Matching (if matching service provided)
+            if matching_service:
+                logger.info(f"Starting matching phase for session {session_id}")
+                # TODO: Implement matching with progress tracking
+                # For now, matching service doesn't have progress tracking integrated
+                # This will be added in future iterations
+                pass
+
+            # Mark session as completed
+            await extraction_service.session_repo.update_session_status(
+                session_id, "completed"
+            )
+
+            # Update final progress state
             if extraction_service.progress_tracker:
-                from ..schemas.phase_progress import ErrorContext
-                error_context = ErrorContext(
-                    type=type(e).__name__,
-                    message=str(e),
-                    context={"session_id": str(session_id)},
-                    timestamp=datetime.utcnow()
-                )
                 await extraction_service.progress_tracker.update_progress(
-                    current_phase="processing",
+                    current_phase="completed",
                     phase_details={
-                        "status": "failed",
-                        "error": error_context
+                        "status": "completed",
+                        "percentage": 100
                     },
                     force_update=True
                 )
                 await extraction_service.progress_tracker.flush_pending()
-        except Exception as cleanup_error:
+
+            logger.info(f"Processing completed successfully for session {session_id}")
+
+            # Commit the database session
+            await db.commit()
+
+        except Exception as e:
             logger.error(
-                f"Failed to update session status after error: {cleanup_error}",
+                f"Background processing failed for session {session_id}: {type(e).__name__}: {str(e)}",
                 exc_info=True
             )
+
+            # Rollback on error
+            await db.rollback()
+
+            # Mark session as failed
+            try:
+                session_repo = SessionRepository(db)
+                await session_repo.update_session_status(
+                    session_id, "failed"
+                )
+                await db.commit()
+            except Exception as cleanup_error:
+                logger.error(
+                    f"Failed to update session status after error: {cleanup_error}",
+                    exc_info=True
+                )
 
     finally:
         # Always clean up temp files
