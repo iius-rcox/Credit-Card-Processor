@@ -58,11 +58,22 @@ class SessionRepository:
 
         await self.db.commit()
 
-        # Query the session back to ensure all computed columns are loaded
-        # This is more reliable than refresh for computed columns
+        # Query the session back with explicit attribute loading
         stmt = select(Session).where(Session.id == session_id)
         result = await self.db.execute(stmt)
         session = result.scalar_one()
+
+        # Force load all computed columns into the instance state
+        # This prevents lazy loading after session closes
+        from sqlalchemy.orm import make_transient_to_detached
+        _ = session.id  # Access all attributes to load them
+        _ = session.created_at
+        _ = session.expires_at
+        _ = session.updated_at
+        _ = session.status
+
+        # Make the object detached so it doesn't try to access the DB
+        make_transient_to_detached(session)
 
         return session
 
