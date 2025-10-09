@@ -4,6 +4,7 @@ Upload API endpoint.
 POST /api/upload - Upload PDF files and create a reconciliation session.
 """
 
+import logging
 from typing import List
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
@@ -12,6 +13,8 @@ from ..dependencies import get_upload_service
 from ..schemas import SessionResponse
 from ...services.upload_service import UploadService
 from ...tasks import process_session_task
+
+logger = logging.getLogger(__name__)
 
 
 router = APIRouter(tags=["upload"])
@@ -63,10 +66,12 @@ async def upload_files(
     try:
         # Process upload (validation + session creation)
         session = await upload_service.process_upload(files)
+        logger.info(f"Session created: {session.id}, dispatching Celery task...")
 
         # Queue background processing task using Celery
         # This dispatches to Redis queue and returns immediately
-        process_session_task.delay(str(session.id))
+        task = process_session_task.delay(str(session.id))
+        logger.info(f"Celery task dispatched: {task.id} for session {session.id}")
 
         # Convert to dict first to avoid greenlet issues with computed columns
         return SessionResponse(

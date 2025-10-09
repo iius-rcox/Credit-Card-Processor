@@ -32,10 +32,12 @@ spec:
 
       containers:
       - name: celery-worker
-        image: iiusacr.azurecr.io/credit-card-backend:v1.0.14
+        image: iiusacr.azurecr.io/credit-card-backend:v1.1.0
         imagePullPolicy: Always
-        command: ["celery"]
+        command: ["python"]
         args:
+          - "-m"
+          - "celery"
           - "-A"
           - "src.celery_app"
           - "worker"
@@ -94,6 +96,41 @@ spec:
           limits:
             cpu: 500m
             memory: 1Gi
+
+        # Health checks using celery inspect
+        livenessProbe:
+          exec:
+            command:
+              - python
+              - -m
+              - celery
+              - -A
+              - src.celery_app
+              - inspect
+              - ping
+              - -d
+              - "celery@$HOSTNAME"
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+
+        readinessProbe:
+          exec:
+            command:
+              - python
+              - -m
+              - celery
+              - -A
+              - src.celery_app
+              - inspect
+              - ping
+              - -d
+              - "celery@$HOSTNAME"
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
 
         # Security context
         securityContext:
