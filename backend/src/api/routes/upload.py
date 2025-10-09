@@ -79,7 +79,18 @@ async def upload_files(
             matching_service
         )
 
-        return SessionResponse.model_validate(session)
+        # Convert to dict first to avoid greenlet issues with computed columns
+        return SessionResponse(
+            id=session.id,
+            status=session.status,
+            upload_count=session.upload_count,
+            total_transactions=session.total_transactions,
+            total_receipts=session.total_receipts,
+            matched_count=session.matched_count,
+            created_at=session.created_at,
+            expires_at=session.expires_at,
+            updated_at=session.updated_at
+        )
 
     except HTTPException:
         # Re-raise HTTP exceptions (validation errors)
