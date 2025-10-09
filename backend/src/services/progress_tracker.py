@@ -140,23 +140,34 @@ class ProgressTracker:
         # Define phase order
         phase_order = ["upload", "processing", "matching", "report_generation"]
 
-        for phase in phase_order:
-            if phase == current_phase:
-                # Current phase - use provided details
-                phases[phase] = self._create_phase_progress(phase, phase_details)
-            elif phase_order.index(phase) < phase_order.index(current_phase):
-                # Completed phase
+        # Handle terminal states (completed/failed)
+        if current_phase in ["completed", "failed"]:
+            # Mark all phases as completed
+            for phase in phase_order:
                 phases[phase] = PhaseProgress(
                     status="completed",
                     percentage=100,
                     completed_at=datetime.utcnow()
                 )
-            else:
-                # Pending phase
-                phases[phase] = PhaseProgress(
-                    status="pending",
-                    percentage=0
-                )
+        else:
+            # Normal phase progression
+            for phase in phase_order:
+                if phase == current_phase:
+                    # Current phase - use provided details
+                    phases[phase] = self._create_phase_progress(phase, phase_details)
+                elif phase_order.index(phase) < phase_order.index(current_phase):
+                    # Completed phase
+                    phases[phase] = PhaseProgress(
+                        status="completed",
+                        percentage=100,
+                        completed_at=datetime.utcnow()
+                    )
+                else:
+                    # Pending phase
+                    phases[phase] = PhaseProgress(
+                        status="pending",
+                        percentage=0
+                    )
 
         return phases
 
