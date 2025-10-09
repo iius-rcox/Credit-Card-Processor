@@ -52,8 +52,9 @@ class SessionRepository:
         session = Session(**data)
         self.db.add(session)
         await self.db.flush()
+        await self.db.commit()
         await self.db.refresh(session)
-        # Explicitly access computed columns to load them before leaving async context
+        # Explicitly access computed columns to load them into instance
         _ = session.expires_at
         return session
 
