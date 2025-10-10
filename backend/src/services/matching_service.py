@@ -5,7 +5,7 @@ This module implements the matching algorithm that links transactions
 to receipts based on amount, date, and merchant similarity.
 """
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Dict, List, Optional, Tuple
 from uuid import UUID
@@ -13,9 +13,12 @@ from uuid import UUID
 from ..models.transaction import Transaction
 from ..models.receipt import Receipt
 from ..repositories.match_result_repository import MatchResultRepository
+from ..repositories.progress_repository import ProgressRepository
 from ..repositories.receipt_repository import ReceiptRepository
 from ..repositories.session_repository import SessionRepository
 from ..repositories.transaction_repository import TransactionRepository
+from ..schemas.processing_progress import ProcessingProgress
+from ..schemas.phase_progress import PhaseProgress
 
 
 class MatchingService:
@@ -44,7 +47,8 @@ class MatchingService:
         session_repo: SessionRepository,
         transaction_repo: TransactionRepository,
         receipt_repo: ReceiptRepository,
-        match_result_repo: MatchResultRepository
+        match_result_repo: MatchResultRepository,
+        progress_repo: Optional[ProgressRepository] = None
     ):
         """
         Initialize matching service.
@@ -54,11 +58,13 @@ class MatchingService:
             transaction_repo: TransactionRepository instance
             receipt_repo: ReceiptRepository instance
             match_result_repo: MatchResultRepository instance
+            progress_repo: Optional ProgressRepository for progress tracking
         """
         self.session_repo = session_repo
         self.transaction_repo = transaction_repo
         self.receipt_repo = receipt_repo
         self.match_result_repo = match_result_repo
+        self.progress_repo = progress_repo
 
     async def match_transactions_to_receipts(self, session_id: UUID) -> None:
         """
@@ -75,19 +81,28 @@ class MatchingService:
             4. Update session counts and status
         """
         try:
+            # Initialize matching phase progress
+            if self.progress_repo:
+                await self._init_matching_progress(session_id)
+
             # Get all transactions and receipts
             transactions = await self.transaction_repo.get_transactions_by_session(
                 session_id
             )
             receipts = await self.receipt_repo.get_receipts_by_session(session_id)
 
+            total_transactions = len(transactions)
+            total_receipts = len(receipts)
+
             # Track used receipts (one receipt can only match one transaction)
             used_receipt_ids = set()
 
             # Create match results
             match_results = []
+            matched_count = 0
+            unmatched_count = 0
 
-            for transaction in transactions:
+            for idx, transaction in enumerate(transactions):
                 # Find best matching receipt
                 best_match, confidence, factors = self._find_best_match(
                     transaction, receipts, used_receipt_ids
@@ -99,16 +114,19 @@ class MatchingService:
                     used_receipt_ids.add(best_match.id)
                     receipt_id = best_match.id
                     match_reason = f"Matched with {confidence:.2%} confidence"
+                    matched_count += 1
                 elif best_match:
                     # Low confidence - needs manual review
                     match_status = "manual_review"
                     receipt_id = best_match.id
                     match_reason = f"Low confidence match ({confidence:.2%}) - needs review"
+                    matched_count += 1  # Count as matched (pending review)
                 else:
                     # No match found
                     match_status = "unmatched"
                     receipt_id = None
                     match_reason = "No matching receipt found"
+                    unmatched_count += 1
 
                 # Calculate differences if we have a match
                 amount_diff = None
@@ -137,9 +155,27 @@ class MatchingService:
                     **match_data
                 })
 
+                # Update progress every 10 transactions or at the end
+                if self.progress_repo and (idx % 10 == 0 or idx == total_transactions - 1):
+                    await self._update_matching_progress(
+                        session_id,
+                        processed=idx + 1,
+                        total=total_transactions,
+                        matched=matched_count,
+                        unmatched=unmatched_count
+                    )
+
             # Bulk create match results
             if match_results:
                 await self.match_result_repo.bulk_create_match_results(match_results)
+
+            # Complete matching phase
+            if self.progress_repo:
+                await self._complete_matching_progress(
+                    session_id,
+                    matched_count,
+                    unmatched_count
+                )
 
             # Update session counts
             await self.session_repo.update_session_counts(session_id)
@@ -334,3 +370,172 @@ class MatchingService:
             previous_row = current_row
 
         return previous_row[-1]
+
+    async def _init_matching_progress(self, session_id: UUID) -> None:
+        """
+        Initialize progress tracking for matching phase.
+
+        Args:
+            session_id: UUID of the session
+        """
+        # Get current progress to preserve earlier phases
+        current_progress = await self.progress_repo.get_session_progress(session_id)
+
+        phases = {
+            "upload": PhaseProgress(
+                status="completed",
+                percentage=100
+            ),
+            "processing": PhaseProgress(
+                status="completed",
+                percentage=100
+            ),
+            "matching": PhaseProgress(
+                status="in_progress",
+                percentage=0,
+                started_at=datetime.utcnow(),
+                matches_found=0,
+                unmatched_count=0
+            ),
+            "report_generation": PhaseProgress(
+                status="pending",
+                percentage=0
+            )
+        }
+
+        # Preserve existing phase data if available
+        if current_progress:
+            if "upload" in current_progress.phases:
+                phases["upload"] = current_progress.phases["upload"]
+            if "processing" in current_progress.phases:
+                phases["processing"] = current_progress.phases["processing"]
+
+        progress = ProcessingProgress(
+            overall_percentage=70,  # Upload (10%) + Processing (60%) complete
+            current_phase="matching",
+            phases=phases,
+            last_update=datetime.utcnow(),
+            status_message="Starting transaction matching..."
+        )
+
+        await self.progress_repo.update_session_progress(session_id, progress)
+
+    async def _update_matching_progress(
+        self,
+        session_id: UUID,
+        processed: int,
+        total: int,
+        matched: int,
+        unmatched: int
+    ) -> None:
+        """
+        Update progress during matching phase.
+
+        Args:
+            session_id: Session ID
+            processed: Number of transactions processed
+            total: Total number of transactions
+            matched: Number of successful matches
+            unmatched: Number of unmatched transactions
+        """
+        percentage = int((processed / total) * 100) if total > 0 else 0
+
+        # Get current progress to preserve earlier phases
+        current_progress = await self.progress_repo.get_session_progress(session_id)
+
+        phases = {
+            "upload": PhaseProgress(
+                status="completed",
+                percentage=100
+            ),
+            "processing": PhaseProgress(
+                status="completed",
+                percentage=100
+            ),
+            "matching": PhaseProgress(
+                status="in_progress",
+                percentage=percentage,
+                matches_found=matched,
+                unmatched_count=unmatched
+            ),
+            "report_generation": PhaseProgress(
+                status="pending",
+                percentage=0
+            )
+        }
+
+        # Preserve existing phase data if available
+        if current_progress:
+            if "upload" in current_progress.phases:
+                phases["upload"] = current_progress.phases["upload"]
+            if "processing" in current_progress.phases:
+                phases["processing"] = current_progress.phases["processing"]
+
+        # Calculate overall progress (matching is 20% of total)
+        overall = 70 + int(percentage * 0.2)
+
+        progress = ProcessingProgress(
+            overall_percentage=overall,
+            current_phase="matching",
+            phases=phases,
+            last_update=datetime.utcnow(),
+            status_message=f"Matching transactions: {processed}/{total} processed, {matched} matched"
+        )
+
+        await self.progress_repo.update_session_progress(session_id, progress)
+
+    async def _complete_matching_progress(
+        self,
+        session_id: UUID,
+        matched_count: int,
+        unmatched_count: int
+    ) -> None:
+        """
+        Mark matching phase as complete.
+
+        Args:
+            session_id: Session ID
+            matched_count: Final count of matched transactions
+            unmatched_count: Final count of unmatched transactions
+        """
+        # Get current progress to preserve earlier phases
+        current_progress = await self.progress_repo.get_session_progress(session_id)
+
+        phases = {
+            "upload": PhaseProgress(
+                status="completed",
+                percentage=100
+            ),
+            "processing": PhaseProgress(
+                status="completed",
+                percentage=100
+            ),
+            "matching": PhaseProgress(
+                status="completed",
+                percentage=100,
+                completed_at=datetime.utcnow(),
+                matches_found=matched_count,
+                unmatched_count=unmatched_count
+            ),
+            "report_generation": PhaseProgress(
+                status="pending",
+                percentage=0
+            )
+        }
+
+        # Preserve existing phase data if available
+        if current_progress:
+            if "upload" in current_progress.phases:
+                phases["upload"] = current_progress.phases["upload"]
+            if "processing" in current_progress.phases:
+                phases["processing"] = current_progress.phases["processing"]
+
+        progress = ProcessingProgress(
+            overall_percentage=90,  # Upload (10%) + Processing (60%) + Matching (20%)
+            current_phase="matching",
+            phases=phases,
+            last_update=datetime.utcnow(),
+            status_message=f"Matching complete. {matched_count} matched, {unmatched_count} unmatched."
+        )
+
+        await self.progress_repo.update_session_progress(session_id, progress)

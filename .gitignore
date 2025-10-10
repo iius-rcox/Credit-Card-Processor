@@ -12,6 +12,7 @@
 
 # testing
 /coverage
+*nul
 
 # OS reserved files (Windows)
 /nul

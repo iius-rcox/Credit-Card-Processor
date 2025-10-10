@@ -12,7 +12,7 @@ import type { SessionResponse, ReportsResponse } from "@/lib/types";
 
 interface ResultsPanelProps {
   sessionData: SessionResponse;
-  reportsData: ReportsResponse;
+  reportsData?: ReportsResponse; // Make optional
   onDownloadExcel: () => void;
   onDownloadCSV: () => void;
   onUploadNewReceipts: () => void;
@@ -25,7 +25,16 @@ export function ResultsPanel({
   onDownloadCSV,
   onUploadNewReceipts,
 }: ResultsPanelProps) {
-  const { summary } = reportsData;
+  // Safely handle missing reportsData with fallback
+  const summary = reportsData?.summary || {
+    total_employees: 0,
+    complete_employees: 0,
+    incomplete_employees: 0,
+    total_expenses: 0,
+    expenses_missing_receipts: 0,
+    expenses_missing_gl_codes: 0,
+    expenses_missing_both: 0,
+  };
 
   return (
     <div className="w-full max-w-6xl mx-auto space-y-6">
@@ -78,10 +87,10 @@ export function ResultsPanel({
 
       {/* Action Buttons */}
       <div className="flex gap-4">
-        <Button onClick={onDownloadExcel} disabled={!reportsData.excel_report}>
+        <Button onClick={onDownloadExcel} disabled={!reportsData?.excel_report}>
           Download Excel Report ({summary.total_expenses - summary.complete_expenses} incomplete)
         </Button>
-        <Button onClick={onDownloadCSV} variant="secondary" disabled={!reportsData.csv_export}>
+        <Button onClick={onDownloadCSV} variant="secondary" disabled={!reportsData?.csv_export}>
           Download CSV Export ({summary.complete_expenses} complete)
         </Button>
         <Button onClick={onUploadNewReceipts} variant="outline">

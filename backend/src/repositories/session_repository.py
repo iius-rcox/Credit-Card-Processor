@@ -13,6 +13,7 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models.session import Session
+from .progress_repository import ProgressRepository
 
 
 class SessionRepository:
@@ -40,7 +41,7 @@ class SessionRepository:
             data: Dictionary with session data (status, upload_count, etc.)
 
         Returns:
-            Created Session instance
+            Created Session instance with all attributes loaded
 
         Example:
             session = await repo.create_session({
@@ -48,10 +49,47 @@ class SessionRepository:
                 "upload_count": 5
             })
         """
-        session = Session(**data)
+        # Calculate expires_at (90 days from now)
+        now = datetime.utcnow()
+        expires_at = now + timedelta(days=90)
+
+        # Add calculated fields
+        data_with_defaults = {
+            **data,
+            "created_at": now,
+            "expires_at": expires_at,
+            "updated_at": now
+        }
+
+        session = Session(**data_with_defaults)
         self.db.add(session)
         await self.db.flush()
-        await self.db.refresh(session)
+
+        # Get the session ID before commit
+        session_id = session.id
+
+        await self.db.commit()
+
+        # Query the session back with explicit attribute loading
+        stmt = select(Session).where(Session.id == session_id)
+        result = await self.db.execute(stmt)
+        session = result.scalar_one()
+
+        # Force load all attributes including computed columns while session is active
+        # This prevents lazy loading attempts after session closes
+        _ = session.id
+        _ = session.created_at
+        _ = session.expires_at  # Computed column - must be accessed before session closes
+        _ = session.updated_at
+        _ = session.status
+        _ = session.upload_count
+        _ = session.total_transactions
+        _ = session.total_receipts
+        _ = session.matched_count
+
+        # Expunge from session to prevent further DB access attempts
+        self.db.expunge(session)
+
         return session
 
     async def get_session_by_id(self, session_id: UUID) -> Optional[Session]:
@@ -225,3 +263,72 @@ class SessionRepository:
         )
         await self.db.execute(stmt)
         await self.db.flush()
+
+        # Clean up progress data when session completes
+        if status in ["completed", "failed"]:
+            await self._cleanup_session_progress(session_id)
+
+    async def _cleanup_session_progress(self, session_id: UUID) -> None:
+        """
+        Clean up progress tracking data when session completes.
+
+        This method clears the JSONB progress data to save storage space,
+        but keeps the cached summary fields for historical reference.
+
+        Args:
+            session_id: UUID of the session
+        """
+        progress_repo = ProgressRepository(self.db)
+
+        # Mark final phase as complete in progress data
+        if await self.get_session_by_id(session_id):
+            current_progress = await progress_repo.get_session_progress(session_id)
+
+            if current_progress:
+                # Update to show completed status
+                from ..schemas.processing_progress import ProcessingProgress
+                from ..schemas.phase_progress import PhaseProgress
+
+                final_phase = "completed" if current_progress.overall_percentage >= 100 else current_progress.current_phase
+
+                # Create final progress update
+                final_progress = ProcessingProgress(
+                    overall_percentage=min(100, current_progress.overall_percentage),
+                    current_phase=final_phase,
+                    phases=current_progress.phases,
+                    last_update=datetime.utcnow(),
+                    status_message="Processing completed." if final_phase == "completed" else "Processing stopped.",
+                    error=current_progress.error
+                )
+
+                # Mark report generation as complete if we reached that phase
+                if "report_generation" in final_progress.phases:
+                    final_progress.phases["report_generation"] = PhaseProgress(
+                        status="completed" if final_phase == "completed" else "pending",
+                        percentage=100 if final_phase == "completed" else 0,
+                        completed_at=datetime.utcnow() if final_phase == "completed" else None
+                    )
+
+                await progress_repo.update_session_progress(session_id, final_progress)
+
+            # After a short delay, clear the detailed progress data
+            # In production, this might be done by a background task
+            # For now, we'll just clear it immediately
+            await progress_repo.clear_session_progress(session_id)
+
+    async def complete_session(
+        self,
+        session_id: UUID,
+        cleanup_progress: bool = True
+    ) -> None:
+        """
+        Mark a session as complete and optionally clean up progress data.
+
+        Args:
+            session_id: UUID of the session
+            cleanup_progress: Whether to clean up progress data (default: True)
+        """
+        await self.update_session_status(session_id, "completed")
+
+        if cleanup_progress:
+            await self._cleanup_session_progress(session_id)

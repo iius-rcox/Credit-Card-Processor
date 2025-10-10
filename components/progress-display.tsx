@@ -10,8 +10,6 @@ import { useState, useEffect } from "react";
 import { Progress } from "@/components/ui/progress";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { processSession } from "@/lib/api-client";
-import type { ProcessProgressEvent } from "@/lib/types";
 
 interface ProgressDisplayProps {
   sessionId: string;
@@ -25,31 +23,43 @@ export function ProgressDisplay({ sessionId, onComplete, onError }: ProgressDisp
   const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
-    // Start processing when component mounts
-    startProcessing();
-  }, [sessionId]);
-
-  const startProcessing = async () => {
     setIsProcessing(true);
+    setCurrentStep("Processing files...");
+    setProgress(10);
 
-    try {
-      await processSession(sessionId, (event: ProcessProgressEvent) => {
-        setProgress(event.progress);
-        setCurrentStep(event.step);
+    let currentProgress = 10;
 
-        if (event.status === "complete") {
+    const pollInterval = setInterval(async () => {
+      try {
+        const { getSessionDetail } = await import("@/lib/api-client");
+        const session = await getSessionDetail(sessionId);
+
+        // Update progress based on status
+        if (session.status === "processing") {
+          currentProgress = Math.min(currentProgress + 10, 90);
+          setProgress(currentProgress);
+          setCurrentStep("Extracting data and matching transactions...");
+        } else if (session.status === "completed") {
+          setProgress(100);
+          setCurrentStep("Complete!");
+          clearInterval(pollInterval);
           setIsProcessing(false);
           onComplete();
-        } else if (event.status === "error") {
+        } else if (session.status === "failed") {
+          clearInterval(pollInterval);
           setIsProcessing(false);
-          onError(event.error || "Processing failed");
+          onError("Processing failed");
         }
-      });
-    } catch (err) {
-      setIsProcessing(false);
-      onError(err instanceof Error ? err.message : "Processing failed");
-    }
-  };
+      } catch (err) {
+        clearInterval(pollInterval);
+        setIsProcessing(false);
+        onError(err instanceof Error ? err.message : "Failed to check status");
+      }
+    }, 2000); // Poll every 2 seconds
+
+    // Cleanup on unmount
+    return () => clearInterval(pollInterval);
+  }, [sessionId, onComplete, onError]);
 
   return (
     <Card className="w-full max-w-2xl mx-auto">

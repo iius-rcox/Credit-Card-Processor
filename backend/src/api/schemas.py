@@ -20,6 +20,10 @@ class SessionBase(BaseModel):
     total_transactions: int
     total_receipts: int
     matched_count: int
+    current_phase: Optional[str] = None
+    overall_percentage: Optional[Decimal] = None
+    processing_progress: Optional[dict] = None
+    summary: Optional[str] = None  # Summary text for frontend display
 
 
 class SessionResponse(SessionBase):

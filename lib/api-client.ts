@@ -13,7 +13,11 @@ import type {
   UpdateResponse,
 } from "./types";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// In production on credit-card.ii-us.com, use same origin (ingress routes /api to backend)
+// Otherwise use NEXT_PUBLIC_API_URL or empty string for relative paths
+const API_BASE_URL = typeof window !== 'undefined' && window.location.hostname === 'credit-card.ii-us.com'
+  ? `${window.location.protocol}//${window.location.host}`
+  : (process.env.NEXT_PUBLIC_API_URL || "");
 
 /**
  * Generic API request helper with error handling
@@ -151,9 +155,14 @@ export async function downloadReport(sessionId: string, format: 'xlsx' | 'csv' =
  * Delete a session and all related data
  */
 export async function deleteSession(sessionId: string): Promise<void> {
-  await fetch(`${API_BASE_URL}/api/sessions/${sessionId}`, {
+  const response = await fetch(`${API_BASE_URL}/api/sessions/${sessionId}`, {
     method: 'DELETE',
   });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: response.statusText }));
+    throw new Error(error.detail || error.message || `Failed to delete session: HTTP ${response.status}`);
+  }
 }
 
 /**
@@ -168,8 +177,9 @@ export async function uploadPDFs(
   expenseReport: File
 ): Promise<UploadResponse> {
   const formData = new FormData();
-  formData.append("creditCardStatement", creditCardStatement);
-  formData.append("expenseReport", expenseReport);
+  // Backend expects 'files' field name (List[UploadFile])
+  formData.append("files", creditCardStatement);
+  formData.append("files", expenseReport);
 
   const response = await fetch(`${API_BASE_URL}/api/upload`, {
     method: "POST",
@@ -177,8 +187,9 @@ export async function uploadPDFs(
   });
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error || error.detail || "Upload failed");
+    const error = await response.json().catch(() => ({ detail: "Upload failed" }));
+    const errorMessage = error.detail || error.error || error.message || JSON.stringify(error);
+    throw new Error(errorMessage);
   }
 
   return response.json();

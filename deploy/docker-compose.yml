@@ -57,6 +57,31 @@ services:
         condition: service_healthy
     command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
 
+  celery-worker:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: credit-card-celery-worker
+    environment:
+      DATABASE_URL: postgresql+asyncpg://ccprocessor:devpassword123@postgres:5432/credit_card_db
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: credit_card_db
+      POSTGRES_USER: ccprocessor
+      POSTGRES_PASSWORD: devpassword123
+      REDIS_URL: redis://redis:6379/0
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      ENVIRONMENT: development
+      LOG_LEVEL: DEBUG
+    volumes:
+      - ../backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: python -m celery -A src.celery_app worker --loglevel=debug --concurrency=2
+
   frontend:
     image: node:20-alpine
     container_name: credit-card-frontend

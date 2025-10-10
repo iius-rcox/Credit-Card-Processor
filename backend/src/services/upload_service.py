@@ -5,16 +5,29 @@ This module manages the upload workflow including file validation,
 storage, and session creation.
 """
 
+import asyncio
+import logging
 import os
 import tempfile
+from datetime import datetime
 from pathlib import Path
-from typing import List
+from typing import List, Optional, TYPE_CHECKING
 from uuid import UUID
 
 from fastapi import HTTPException, UploadFile
 
 from ..models.session import Session
 from ..repositories.session_repository import SessionRepository
+from ..repositories.progress_repository import ProgressRepository
+from ..schemas.processing_progress import ProcessingProgress
+from ..schemas.phase_progress import PhaseProgress
+from .progress_tracker import ProgressTracker
+
+if TYPE_CHECKING:
+    from .extraction_service import ExtractionService
+    from .matching_service import MatchingService
+
+logger = logging.getLogger(__name__)
 
 
 class UploadService:
@@ -26,17 +39,19 @@ class UploadService:
     """
 
     MAX_FILE_COUNT = 100
-    MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB in bytes
+    MAX_FILE_SIZE = 300 * 1024 * 1024  # 300MB in bytes
     ALLOWED_MIME_TYPES = ["application/pdf"]
 
-    def __init__(self, session_repo: SessionRepository):
+    def __init__(self, session_repo: SessionRepository, progress_repo: Optional[ProgressRepository] = None):
         """
         Initialize upload service.
 
         Args:
             session_repo: SessionRepository instance
+            progress_repo: Optional ProgressRepository for progress tracking
         """
         self.session_repo = session_repo
+        self.progress_repo = progress_repo
 
     async def process_upload(
         self, files: List[UploadFile]
@@ -81,8 +96,12 @@ class UploadService:
             "upload_count": len(validated_files)
         })
 
-        # Save files to temporary storage
-        temp_dir = await self._save_files_to_temp(session.id, validated_files)
+        # Initialize progress tracking for upload phase
+        if self.progress_repo:
+            await self._init_upload_progress(session.id, len(validated_files))
+
+        # Save files to temporary storage with progress tracking
+        temp_dir = await self._save_files_to_temp_with_progress(session.id, validated_files)
 
         # TODO: Dispatch background task for extraction
         # This would typically be done with Celery, Redis Queue, or FastAPI BackgroundTasks
@@ -198,6 +217,192 @@ class UploadService:
 
         return filename
 
+    async def _init_upload_progress(self, session_id: UUID, file_count: int) -> None:
+        """
+        Initialize progress tracking for upload phase.
+
+        Args:
+            session_id: UUID of the session
+            file_count: Number of files being uploaded
+        """
+        progress = ProcessingProgress(
+            overall_percentage=0,
+            current_phase="upload",
+            phases={
+                "upload": PhaseProgress(
+                    status="in_progress",
+                    percentage=0,
+                    started_at=datetime.utcnow(),
+                    files_uploaded=0,
+                    bytes_uploaded=0
+                ),
+                "processing": PhaseProgress(
+                    status="pending",
+                    percentage=0,
+                    total_files=file_count
+                ),
+                "matching": PhaseProgress(
+                    status="pending",
+                    percentage=0
+                ),
+                "report_generation": PhaseProgress(
+                    status="pending",
+                    percentage=0
+                )
+            },
+            last_update=datetime.utcnow(),
+            status_message=f"Starting upload of {file_count} file(s)..."
+        )
+
+        await self.progress_repo.update_session_progress(session_id, progress)
+
+    async def _save_files_to_temp_with_progress(
+        self, session_id: UUID, files: List[UploadFile]
+    ) -> Path:
+        """
+        Save uploaded files to temporary storage with progress tracking.
+
+        Args:
+            session_id: UUID of the session
+            files: List of validated upload files
+
+        Returns:
+            Path to temporary directory containing saved files
+        """
+        # Create temporary directory for this session
+        temp_dir = Path(tempfile.gettempdir()) / f"credit-card-session-{session_id}"
+        temp_dir.mkdir(parents=True, exist_ok=True)
+
+        total_files = len(files)
+        total_bytes_uploaded = 0
+
+        # Save each file with progress updates
+        for idx, file in enumerate(files):
+            # Generate safe filename
+            safe_filename = f"{idx:04d}_{self._sanitize_filename(file.filename)}"
+            file_path = temp_dir / safe_filename
+
+            # Write file content
+            content = await file.read()
+            file_size = len(content)
+            with open(file_path, "wb") as f:
+                f.write(content)
+
+            # Reset file pointer
+            await file.seek(0)
+
+            # Update progress
+            total_bytes_uploaded += file_size
+            if self.progress_repo:
+                await self._update_upload_progress(
+                    session_id,
+                    files_uploaded=idx + 1,
+                    total_files=total_files,
+                    bytes_uploaded=total_bytes_uploaded,
+                    current_filename=file.filename or f"file_{idx}"
+                )
+
+        # Mark upload phase as complete
+        if self.progress_repo:
+            await self._complete_upload_progress(session_id, total_files, total_bytes_uploaded)
+
+        return temp_dir
+
+    async def _update_upload_progress(
+        self,
+        session_id: UUID,
+        files_uploaded: int,
+        total_files: int,
+        bytes_uploaded: int,
+        current_filename: str
+    ) -> None:
+        """
+        Update progress during file upload.
+
+        Args:
+            session_id: Session ID
+            files_uploaded: Number of files uploaded so far
+            total_files: Total number of files to upload
+            bytes_uploaded: Total bytes uploaded
+            current_filename: Name of the current file
+        """
+        percentage = int((files_uploaded / total_files) * 100)
+
+        progress = ProcessingProgress(
+            overall_percentage=int(percentage * 0.1),  # Upload is 10% of overall
+            current_phase="upload",
+            phases={
+                "upload": PhaseProgress(
+                    status="in_progress",
+                    percentage=percentage,
+                    files_uploaded=files_uploaded,
+                    bytes_uploaded=bytes_uploaded
+                ),
+                "processing": PhaseProgress(
+                    status="pending",
+                    percentage=0,
+                    total_files=total_files
+                ),
+                "matching": PhaseProgress(
+                    status="pending",
+                    percentage=0
+                ),
+                "report_generation": PhaseProgress(
+                    status="pending",
+                    percentage=0
+                )
+            },
+            last_update=datetime.utcnow(),
+            status_message=f"Uploading file {files_uploaded}/{total_files}: {current_filename}"
+        )
+
+        await self.progress_repo.update_session_progress(session_id, progress)
+
+    async def _complete_upload_progress(
+        self,
+        session_id: UUID,
+        total_files: int,
+        total_bytes: int
+    ) -> None:
+        """
+        Mark upload phase as complete.
+
+        Args:
+            session_id: Session ID
+            total_files: Total number of files uploaded
+            total_bytes: Total bytes uploaded
+        """
+        progress = ProcessingProgress(
+            overall_percentage=10,  # Upload complete = 10% overall
+            current_phase="upload",
+            phases={
+                "upload": PhaseProgress(
+                    status="completed",
+                    percentage=100,
+                    completed_at=datetime.utcnow(),
+                    files_uploaded=total_files,
+                    bytes_uploaded=total_bytes
+                ),
+                "processing": PhaseProgress(
+                    status="pending",
+                    percentage=0,
+                    total_files=total_files
+                ),
+                "matching": PhaseProgress(
+                    status="pending",
+                    percentage=0
+                ),
+                "report_generation": PhaseProgress(
+                    status="pending",
+                    percentage=0
+                )
+            },
+            last_update=datetime.utcnow(),
+            status_message=f"Upload complete. {total_files} file(s) uploaded successfully."
+        )
+
+        await self.progress_repo.update_session_progress(session_id, progress)
+
     async def get_upload_temp_path(self, session_id: UUID) -> Path:
         """
         Get temporary storage path for a session.
@@ -230,3 +435,193 @@ class UploadService:
 
             # Remove directory
             temp_dir.rmdir()
+
+
+def process_session_background_sync(session_id: UUID) -> None:
+    """
+    Synchronous wrapper for background task processing.
+
+    FastAPI's BackgroundTasks runs in a thread pool, so we need to
+    get the current event loop or create a new one.
+    """
+    import asyncio
+    try:
+        # Try to get the current event loop
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # If loop is running (shouldn't happen in background thread), create task
+            asyncio.create_task(process_session_background(session_id))
+        else:
+            # Run in the existing loop
+            loop.run_until_complete(process_session_background(session_id))
+    except RuntimeError:
+        # No event loop exists, create a new one
+        asyncio.run(process_session_background(session_id))
+
+
+async def process_session_background(
+    session_id: UUID
+) -> None:
+    """
+    Background task to process uploaded files through extraction and matching.
+
+    This function orchestrates the entire processing workflow:
+    1. Create new database session (not tied to request context)
+    2. Get temp directory path
+    3. Run extraction with progress tracking
+    4. Run matching
+    5. Clean up temp files
+    6. Mark session as completed
+
+    Args:
+        session_id: UUID of the session to process
+
+    Note:
+        This function is designed to be run as a FastAPI BackgroundTask.
+        Errors are caught and logged, with session status updated to 'failed'.
+        Creates its own DB session since it runs outside the request context.
+
+        IMPORTANT: When running in Celery with asyncio.run(), we create a new engine
+        for this event loop to avoid "Future attached to different loop" errors.
+    """
+    from urllib.parse import quote_plus
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+    from ..config import settings
+    from ..repositories.session_repository import SessionRepository
+    from ..repositories.employee_repository import EmployeeRepository
+    from ..repositories.transaction_repository import TransactionRepository
+    from ..repositories.receipt_repository import ReceiptRepository
+    from ..repositories.match_result_repository import MatchResultRepository
+    from ..repositories.progress_repository import ProgressRepository
+    from .extraction_service import ExtractionService
+    from .matching_service import MatchingService
+
+    temp_dir = Path(tempfile.gettempdir()) / f"credit-card-session-{session_id}"
+
+    # Create a new engine for this event loop (Celery worker context)
+    # This prevents "Future attached to different loop" errors
+    database_url = (
+        f"postgresql+asyncpg://{settings.POSTGRES_USER}:{quote_plus(settings.POSTGRES_PASSWORD)}"
+        f"@{settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}"
+    )
+
+    worker_engine = create_async_engine(
+        database_url,
+        echo=False,
+        pool_size=2,  # Smaller pool for worker tasks
+        max_overflow=3,
+        pool_pre_ping=True,
+        connect_args={"server_settings": {"jit": "off"}}
+    )
+
+    WorkerSessionLocal = async_sessionmaker(
+        worker_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+        autoflush=False,
+        autocommit=False,
+    )
+
+    try:
+        # Create new database session for background task using worker engine
+        async with WorkerSessionLocal() as db:
+            try:
+                logger.info(f"Starting background processing for session {session_id}")
+
+                # Create repositories and services with the background task DB session
+                session_repo = SessionRepository(db)
+                employee_repo = EmployeeRepository(db)
+                transaction_repo = TransactionRepository(db)
+                receipt_repo = ReceiptRepository(db)
+                match_result_repo = MatchResultRepository(db)
+                progress_repo = ProgressRepository(db)
+
+                extraction_service = ExtractionService(
+                    session_repo, employee_repo, transaction_repo, receipt_repo, progress_repo
+                )
+                matching_service = MatchingService(
+                    session_repo, transaction_repo, receipt_repo, match_result_repo
+                )
+
+                # Initialize progress tracker in extraction service
+                await extraction_service.initialize_progress_tracker(session_id)
+
+                # Phase 1: Extraction with progress tracking
+                logger.info(f"Starting extraction phase for session {session_id}")
+                await extraction_service.process_session_files_with_progress(
+                    session_id, temp_dir
+                )
+
+                # Phase 2: Matching (if matching service provided)
+                if matching_service:
+                    logger.info(f"Starting matching phase for session {session_id}")
+                    # TODO: Implement matching with progress tracking
+                    # For now, matching service doesn't have progress tracking integrated
+                    # This will be added in future iterations
+                    pass
+
+                # Mark session as completed
+                await extraction_service.session_repo.update_session_status(
+                    session_id, "completed"
+                )
+
+                # Update final progress state
+                if extraction_service.progress_tracker:
+                    await extraction_service.progress_tracker.update_progress(
+                        current_phase="completed",
+                        phase_details={
+                            "status": "completed",
+                            "percentage": 100
+                        },
+                        force_update=True
+                    )
+                    await extraction_service.progress_tracker.flush_pending()
+
+                logger.info(f"Processing completed successfully for session {session_id}")
+
+                # Commit the database session
+                await db.commit()
+
+            except Exception as e:
+                logger.error(
+                    f"Background processing failed for session {session_id}: {type(e).__name__}: {str(e)}",
+                    exc_info=True
+                )
+
+                # Rollback on error
+                await db.rollback()
+
+                # Mark session as failed
+                try:
+                    session_repo = SessionRepository(db)
+                    await session_repo.update_session_status(
+                        session_id, "failed"
+                    )
+                    await db.commit()
+                except Exception as cleanup_error:
+                    logger.error(
+                        f"Failed to update session status after error: {cleanup_error}",
+                        exc_info=True
+                    )
+
+    finally:
+        # Dispose of the worker engine to close all connections
+        try:
+            await worker_engine.dispose()
+            logger.info(f"Disposed worker engine for session {session_id}")
+        except Exception as engine_error:
+            logger.error(f"Failed to dispose worker engine: {engine_error}", exc_info=True)
+
+        # Always clean up temp files
+        try:
+            if temp_dir.exists():
+                for file_path in temp_dir.iterdir():
+                    if file_path.is_file():
+                        file_path.unlink()
+                temp_dir.rmdir()
+                logger.info(f"Cleaned up temp files for session {session_id}")
+        except Exception as cleanup_error:
+            logger.error(
+                f"Failed to cleanup temp files for session {session_id}: {cleanup_error}",
+                exc_info=True
+            )

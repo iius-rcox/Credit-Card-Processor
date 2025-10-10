@@ -20,6 +20,12 @@ COPY . .
 # Set environment variables for build
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
+# Set API URL for build (can be overridden with --build-arg)
+ARG NEXT_PUBLIC_API_URL=""
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+# Backend URL for Next.js rewrites (build-time)
+ARG BACKEND_URL="http://localhost:8000"
+ENV BACKEND_URL=${BACKEND_URL}
 
 # Build Next.js application
 RUN npm run build

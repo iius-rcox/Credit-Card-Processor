@@ -26,6 +26,9 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
 
+    # Increase max body size for PDF uploads (default is 1m, set to 200m)
+    nginx.ingress.kubernetes.io/proxy-body-size: "200m"
+
     # Security headers
     nginx.ingress.kubernetes.io/configuration-snippet: |
       more_set_headers "X-Frame-Options: SAMEORIGIN";

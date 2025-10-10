@@ -33,6 +33,8 @@ import {
   isSessionNameUnique,
 } from '@/lib/session-utils';
 
+import { listSessions, deleteSession as deleteSessionAPI } from '@/lib/api-client';
+
 import SessionErrorBoundary from './session-error-boundary';
 
 // Create the context
@@ -196,10 +198,48 @@ export function SessionProvider({ children, initialStorage }: SessionProviderPro
         throw new Error('Session not found');
       }
 
-      updateSessionStorage({
-        type: 'DELETE_SESSION',
-        payload: { id },
+      // Call backend API to delete session
+      await deleteSessionAPI(id);
+
+      // Reload sessions from backend after successful deletion
+      const sessionsData = await listSessions(1, 50);
+
+      // Map API sessions to MonthSession format
+      const apiSessions: Record<string, MonthSession> = {};
+      sessionsData.items.forEach((apiSession: any) => {
+        // Map backend status to UI status
+        let uiStatus: 'Processing' | 'Complete' | 'Updated' | 'Error' = 'Processing';
+        if (apiSession.status === 'completed') uiStatus = 'Complete';
+        else if (apiSession.status === 'failed') uiStatus = 'Error';
+        else if (apiSession.status === 'processing') uiStatus = 'Processing';
+
+        apiSessions[apiSession.id] = {
+          id: apiSession.id,
+          name: `Session ${new Date(apiSession.created_at).toLocaleDateString()}`,
+          status: uiStatus,
+          createdAt: new Date(apiSession.created_at).getTime(),
+          updatedAt: new Date(apiSession.updated_at).getTime(),
+          expiresAt: new Date(apiSession.expires_at).getTime(),
+          hasReports: apiSession.total_transactions > 0 && apiSession.matched_count > 0,
+          summary: apiSession.summary || undefined,
+          uploadedFiles: {
+            transactions: apiSession.total_transactions || 0,
+            receipts: apiSession.total_receipts || 0,
+          },
+          matchResults: {
+            totalMatches: apiSession.matched_count || 0,
+            unmatchedTransactions: 0,
+            unmatchedReceipts: 0,
+          },
+        };
       });
+
+      // Update storage with refreshed sessions
+      const updatedStorage: SessionStorage = {
+        sessions: apiSessions,
+        activeSessionId: state.storage.activeSessionId && apiSessions[state.storage.activeSessionId] ? state.storage.activeSessionId : null,
+      };
+      dispatch({ type: 'UPDATE_STORAGE', payload: updatedStorage });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to delete session';
       dispatch({ type: 'SET_ERROR', payload: errorMessage });
@@ -313,6 +353,53 @@ export function SessionProvider({ children, initialStorage }: SessionProviderPro
   const clearFilter = useCallback((): void => {
     dispatch({ type: 'CLEAR_FILTER' });
   }, []);
+
+  // Load sessions from backend API on mount
+  useEffect(() => {
+    const loadSessionsFromAPI = async () => {
+      try {
+        dispatch({ type: 'SET_LOADING', payload: true });
+        const sessionsData = await listSessions(1, 50);
+
+        // Map API sessions to MonthSession format
+        const apiSessions: Record<string, MonthSession> = {};
+        sessionsData.items.forEach((apiSession: any) => {
+          // Map backend status to UI status
+          let uiStatus: 'Processing' | 'Complete' | 'Updated' | 'Error' = 'Processing';
+          if (apiSession.status === 'completed') uiStatus = 'Complete';
+          else if (apiSession.status === 'failed') uiStatus = 'Error';
+          else if (apiSession.status === 'processing') uiStatus = 'Processing';
+
+          apiSessions[apiSession.id] = {
+            id: apiSession.id,
+            name: `Session ${new Date(apiSession.created_at).toLocaleDateString()}`,
+            status: uiStatus,
+            createdAt: new Date(apiSession.created_at).getTime(),
+            lastUpdated: new Date(apiSession.updated_at).getTime(),
+            fileCount: apiSession.upload_count || 0,
+            matchCount: apiSession.matched_count || 0,
+            hasReports: apiSession.status === 'completed',
+            backendSessionId: apiSession.id,
+          };
+        });
+
+        // Update storage with API sessions
+        dispatch({
+          type: 'UPDATE_STORAGE',
+          payload: {
+            ...state.storage,
+            sessions: apiSessions,
+          },
+        });
+        dispatch({ type: 'SET_LOADING', payload: false });
+      } catch (error) {
+        console.error('Failed to load sessions from API:', error);
+        dispatch({ type: 'SET_ERROR', payload: 'Failed to load sessions from server' });
+      }
+    };
+
+    loadSessionsFromAPI();
+  }, []); // Only run on mount
 
   // Cleanup expired sessions periodically
   useEffect(() => {
