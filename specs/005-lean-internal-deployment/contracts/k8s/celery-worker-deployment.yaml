@@ -98,18 +98,14 @@ spec:
             memory: 1Gi
 
         # Health checks using celery inspect
+        # Note: We use 'inspect ping' without -d flag to check all workers
+        # The timeout must be shorter than periodSeconds to avoid overlapping checks
         livenessProbe:
           exec:
             command:
-              - python
-              - -m
-              - celery
-              - -A
-              - src.celery_app
-              - inspect
-              - ping
-              - -d
-              - "celery@$HOSTNAME"
+              - /bin/sh
+              - -c
+              - "python -m celery -A src.celery_app inspect ping --timeout=8 | grep -q 'pong'"
           initialDelaySeconds: 30
           periodSeconds: 30
           timeoutSeconds: 10
@@ -118,15 +114,9 @@ spec:
         readinessProbe:
           exec:
             command:
-              - python
-              - -m
-              - celery
-              - -A
-              - src.celery_app
-              - inspect
-              - ping
-              - -d
-              - "celery@$HOSTNAME"
+              - /bin/sh
+              - -c
+              - "python -m celery -A src.celery_app inspect ping --timeout=3 | grep -q 'pong'"
           initialDelaySeconds: 10
           periodSeconds: 10
           timeoutSeconds: 5

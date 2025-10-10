@@ -49,7 +49,19 @@ class SessionRepository:
                 "upload_count": 5
             })
         """
-        session = Session(**data)
+        # Calculate expires_at (90 days from now)
+        now = datetime.utcnow()
+        expires_at = now + timedelta(days=90)
+
+        # Add calculated fields
+        data_with_defaults = {
+            **data,
+            "created_at": now,
+            "expires_at": expires_at,
+            "updated_at": now
+        }
+
+        session = Session(**data_with_defaults)
         self.db.add(session)
         await self.db.flush()
 

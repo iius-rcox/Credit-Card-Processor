@@ -155,9 +155,14 @@ export async function downloadReport(sessionId: string, format: 'xlsx' | 'csv' =
  * Delete a session and all related data
  */
 export async function deleteSession(sessionId: string): Promise<void> {
-  await fetch(`${API_BASE_URL}/api/sessions/${sessionId}`, {
+  const response = await fetch(`${API_BASE_URL}/api/sessions/${sessionId}`, {
     method: 'DELETE',
   });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: response.statusText }));
+    throw new Error(error.detail || error.message || `Failed to delete session: HTTP ${response.status}`);
+  }
 }
 
 /**

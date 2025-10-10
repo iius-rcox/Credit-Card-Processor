@@ -33,7 +33,7 @@ import {
   isSessionNameUnique,
 } from '@/lib/session-utils';
 
-import { listSessions } from '@/lib/api-client';
+import { listSessions, deleteSession as deleteSessionAPI } from '@/lib/api-client';
 
 import SessionErrorBoundary from './session-error-boundary';
 
@@ -199,20 +199,47 @@ export function SessionProvider({ children, initialStorage }: SessionProviderPro
       }
 
       // Call backend API to delete session
-      const response = await fetch(`/api/sessions/${id}`, {
-        method: 'DELETE',
+      await deleteSessionAPI(id);
+
+      // Reload sessions from backend after successful deletion
+      const sessionsData = await listSessions(1, 50);
+
+      // Map API sessions to MonthSession format
+      const apiSessions: Record<string, MonthSession> = {};
+      sessionsData.items.forEach((apiSession: any) => {
+        // Map backend status to UI status
+        let uiStatus: 'Processing' | 'Complete' | 'Updated' | 'Error' = 'Processing';
+        if (apiSession.status === 'completed') uiStatus = 'Complete';
+        else if (apiSession.status === 'failed') uiStatus = 'Error';
+        else if (apiSession.status === 'processing') uiStatus = 'Processing';
+
+        apiSessions[apiSession.id] = {
+          id: apiSession.id,
+          name: `Session ${new Date(apiSession.created_at).toLocaleDateString()}`,
+          status: uiStatus,
+          createdAt: new Date(apiSession.created_at).getTime(),
+          updatedAt: new Date(apiSession.updated_at).getTime(),
+          expiresAt: new Date(apiSession.expires_at).getTime(),
+          hasReports: apiSession.total_transactions > 0 && apiSession.matched_count > 0,
+          summary: apiSession.summary || undefined,
+          uploadedFiles: {
+            transactions: apiSession.total_transactions || 0,
+            receipts: apiSession.total_receipts || 0,
+          },
+          matchResults: {
+            totalMatches: apiSession.matched_count || 0,
+            unmatchedTransactions: 0,
+            unmatchedReceipts: 0,
+          },
+        };
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || 'Failed to delete session from server');
-      }
-
-      // Update local storage after successful backend deletion
-      updateSessionStorage({
-        type: 'DELETE_SESSION',
-        payload: { id },
-      });
+      // Update storage with refreshed sessions
+      const updatedStorage: SessionStorage = {
+        sessions: apiSessions,
+        activeSessionId: state.storage.activeSessionId && apiSessions[state.storage.activeSessionId] ? state.storage.activeSessionId : null,
+      };
+      dispatch({ type: 'UPDATE_STORAGE', payload: updatedStorage });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to delete session';
       dispatch({ type: 'SET_ERROR', payload: errorMessage });

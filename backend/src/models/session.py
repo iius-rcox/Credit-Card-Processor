@@ -68,7 +68,6 @@ class Session(Base):
 
     expires_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        Computed("created_at + INTERVAL '90 days'"),
         nullable=False
     )
 
@@ -132,6 +131,13 @@ class Session(Base):
         default=0.00,
         server_default="0.00",
         comment="Cached aggregate progress percentage"
+    )
+
+    summary: Mapped[Optional[str]] = mapped_column(
+        String(500),
+        nullable=True,
+        default=None,
+        comment="Summary text for frontend display"
     )
 
     # Relationships (cascade delete to all child entities)

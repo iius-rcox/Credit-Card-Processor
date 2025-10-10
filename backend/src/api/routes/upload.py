@@ -66,32 +66,60 @@ async def upload_files(
     try:
         # Process upload (validation + session creation)
         session = await upload_service.process_upload(files)
-        logger.info(f"Session created: {session.id}, dispatching Celery task...")
+        logger.info(f"✓ Session created: {session.id}, status={session.status}")
+        logger.info(f"  Session object type: {type(session).__name__}")
+        logger.info(f"  Session attributes: id={session.id}, status={session.status}, upload_count={session.upload_count}")
 
         # Queue background processing task using Celery
         # This dispatches to Redis queue and returns immediately
-        task = process_session_task.delay(str(session.id))
-        logger.info(f"Celery task dispatched: {task.id} for session {session.id}")
+        try:
+            logger.info(f"→ Attempting to dispatch Celery task for session {session.id}...")
+            task = process_session_task.delay(str(session.id))
+            logger.info(f"✓ Celery task dispatched successfully!")
+            logger.info(f"  Task ID: {task.id}")
+            logger.info(f"  Task state: {task.state}")
+            logger.info(f"  Session ID sent to task: {session.id}")
+        except Exception as task_error:
+            logger.error(f"✗ FAILED to dispatch Celery task!", exc_info=True)
+            logger.error(f"  Error type: {type(task_error).__name__}")
+            logger.error(f"  Error message: {str(task_error)}")
+            logger.error(f"  Session ID: {session.id}")
+            # Re-raise to be caught by outer exception handler
+            raise
 
         # Convert to dict first to avoid greenlet issues with computed columns
-        return SessionResponse(
-            id=session.id,
-            status=session.status,
-            upload_count=session.upload_count,
-            total_transactions=session.total_transactions,
-            total_receipts=session.total_receipts,
-            matched_count=session.matched_count,
-            created_at=session.created_at,
-            expires_at=session.expires_at,
-            updated_at=session.updated_at
-        )
+        logger.info(f"→ Creating SessionResponse for session {session.id}...")
+        try:
+            response = SessionResponse(
+                id=session.id,
+                status=session.status,
+                upload_count=session.upload_count,
+                total_transactions=session.total_transactions,
+                total_receipts=session.total_receipts,
+                matched_count=session.matched_count,
+                created_at=session.created_at,
+                expires_at=session.expires_at,
+                updated_at=session.updated_at
+            )
+            logger.info(f"✓ SessionResponse created successfully for session {session.id}")
+            logger.info(f"  Response: {response.model_dump_json()}")
+            return response
+        except Exception as response_error:
+            logger.error(f"✗ FAILED to create SessionResponse!", exc_info=True)
+            logger.error(f"  Error type: {type(response_error).__name__}")
+            logger.error(f"  Error message: {str(response_error)}")
+            raise
 
     except HTTPException:
         # Re-raise HTTP exceptions (validation errors)
+        logger.warning(f"HTTP exception during upload processing", exc_info=True)
         raise
 
     except Exception as e:
         # Catch unexpected errors
+        logger.error(f"✗ Unexpected error during upload processing!", exc_info=True)
+        logger.error(f"  Error type: {type(e).__name__}")
+        logger.error(f"  Error message: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to process upload: {str(e)}"

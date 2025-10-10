@@ -480,8 +480,13 @@ async def process_session_background(
         This function is designed to be run as a FastAPI BackgroundTask.
         Errors are caught and logged, with session status updated to 'failed'.
         Creates its own DB session since it runs outside the request context.
+
+        IMPORTANT: When running in Celery with asyncio.run(), we create a new engine
+        for this event loop to avoid "Future attached to different loop" errors.
     """
-    from ..database import AsyncSessionLocal
+    from urllib.parse import quote_plus
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+    from ..config import settings
     from ..repositories.session_repository import SessionRepository
     from ..repositories.employee_repository import EmployeeRepository
     from ..repositories.transaction_repository import TransactionRepository
@@ -493,9 +498,33 @@ async def process_session_background(
 
     temp_dir = Path(tempfile.gettempdir()) / f"credit-card-session-{session_id}"
 
+    # Create a new engine for this event loop (Celery worker context)
+    # This prevents "Future attached to different loop" errors
+    database_url = (
+        f"postgresql+asyncpg://{settings.POSTGRES_USER}:{quote_plus(settings.POSTGRES_PASSWORD)}"
+        f"@{settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}"
+    )
+
+    worker_engine = create_async_engine(
+        database_url,
+        echo=False,
+        pool_size=2,  # Smaller pool for worker tasks
+        max_overflow=3,
+        pool_pre_ping=True,
+        connect_args={"server_settings": {"jit": "off"}}
+    )
+
+    WorkerSessionLocal = async_sessionmaker(
+        worker_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+        autoflush=False,
+        autocommit=False,
+    )
+
     try:
-        # Create new database session for background task
-        async with AsyncSessionLocal() as db:
+        # Create new database session for background task using worker engine
+        async with WorkerSessionLocal() as db:
             try:
                 logger.info(f"Starting background processing for session {session_id}")
 
@@ -576,6 +605,13 @@ async def process_session_background(
                     )
 
     finally:
+        # Dispose of the worker engine to close all connections
+        try:
+            await worker_engine.dispose()
+            logger.info(f"Disposed worker engine for session {session_id}")
+        except Exception as engine_error:
+            logger.error(f"Failed to dispose worker engine: {engine_error}", exc_info=True)
+
         # Always clean up temp files
         try:
             if temp_dir.exists():
