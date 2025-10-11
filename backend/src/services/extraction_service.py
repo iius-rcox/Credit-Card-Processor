@@ -6,27 +6,25 @@ from uploaded PDF files.
 """
 
 import re
+import logging
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Dict, List, Optional
 from uuid import UUID
 
-# Note: These imports would require installation of the libraries
-# For now, we'll provide placeholder implementations that can be replaced
-# with actual PDF parsing and OCR logic
-# import PyPDF2
-# import pdfplumber
-# import pytesseract
-# from PIL import Image
+import pdfplumber
 
 from ..repositories.employee_repository import EmployeeRepository
 from ..repositories.progress_repository import ProgressRepository
 from ..repositories.receipt_repository import ReceiptRepository
 from ..repositories.transaction_repository import TransactionRepository
 from ..repositories.session_repository import SessionRepository
+from ..repositories.alias_repository import AliasRepository
 from .progress_tracker import ProgressTracker
 from .progress_calculator import ProgressCalculator
+
+logger = logging.getLogger(__name__)
 
 
 class ExtractionService:
@@ -43,7 +41,8 @@ class ExtractionService:
         employee_repo: EmployeeRepository,
         transaction_repo: TransactionRepository,
         receipt_repo: ReceiptRepository,
-        progress_repo: Optional[ProgressRepository] = None
+        progress_repo: Optional[ProgressRepository] = None,
+        alias_repo: Optional[AliasRepository] = None
     ):
         """
         Initialize extraction service.
@@ -54,14 +53,206 @@ class ExtractionService:
             transaction_repo: TransactionRepository instance
             receipt_repo: ReceiptRepository instance
             progress_repo: Optional ProgressRepository for tracking extraction progress
+            alias_repo: Optional AliasRepository for employee name resolution
         """
         self.session_repo = session_repo
         self.employee_repo = employee_repo
         self.transaction_repo = transaction_repo
         self.receipt_repo = receipt_repo
         self.progress_repo = progress_repo
+        self.alias_repo = alias_repo
         self.progress_tracker: Optional[ProgressTracker] = None
         self.progress_calculator = ProgressCalculator()
+
+        # Compile regex patterns for performance (T017)
+        # Patterns match tab-separated transaction format:
+        # EMPLOYEE_NAME\tExpense_Type\tDate\tAmount\tMerchant_Name\tMerchant_Address\tStatus
+        self.employee_pattern = re.compile(r'^([A-Z][A-Z\s]+?)(?=\t)', re.MULTILINE)
+        self.date_pattern = re.compile(r'(\d{1,2}/\d{1,2}/\d{4})')
+        self.amount_pattern = re.compile(r'([-]?\$?[\d,]+(?:\.\d{2})?)')
+        self.expense_type_pattern = re.compile(
+            r'(Fuel|Meals|General Expense|Hotel|Legal|Maintenance|Misc\. Transportation|Business Services)'
+        )
+
+        # Master transaction pattern (tab-separated fields)
+        self.transaction_pattern = re.compile(
+            r'^([A-Z][A-Z\s]+?)\t'  # Employee name (all caps, before tab)
+            r'([\w\s\.]+?)\t'  # Expense type
+            r'(\d{1,2}/\d{1,2}/\d{4})\t'  # Date (MM/DD/YYYY)
+            r'([-]?\$?[\d,]+(?:\.\d{2})?)\t'  # Amount (with optional $, commas, negative)
+            r'(.+?)\t'  # Merchant name
+            r'(.+?)\t'  # Merchant address
+            r'(.+?)$',  # Status
+            re.MULTILINE
+        )
+
+    def _extract_text(self, pdf_path: Path) -> str:
+        """
+        Extract text from PDF using pdfplumber (T016).
+
+        Args:
+            pdf_path: Path to PDF file
+
+        Returns:
+            Concatenated text from all pages
+
+        Raises:
+            Exception: If PDF is scanned image (no text extractable)
+
+        Note:
+            Uses context manager for proper resource cleanup
+        """
+        text = ""
+
+        with pdfplumber.open(pdf_path) as pdf:
+            for page in pdf.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text += page_text + "\n"
+
+        # Validate that we extracted some text (not a scanned image)
+        if not text or len(text.strip()) == 0:
+            raise Exception("Scanned image PDF not supported. Please upload text-based PDF.")
+
+        return text
+
+    def _parse_date(self, date_str: str) -> Optional[date]:
+        """
+        Parse date string in MM/DD/YYYY format to date object (T017).
+
+        Args:
+            date_str: Date string from PDF (e.g., "03/24/2025" or "3/5/2025")
+
+        Returns:
+            date object if parsing succeeds, None otherwise
+
+        Example:
+            dt = self._parse_date("03/24/2025")  # -> date(2025, 3, 24)
+        """
+        if not date_str:
+            return None
+
+        try:
+            # Handle both MM/DD/YYYY and M/D/YYYY formats
+            return datetime.strptime(date_str, '%m/%d/%Y').date()
+        except ValueError:
+            try:
+                # Try without leading zeros
+                return datetime.strptime(date_str, '%-m/%-d/%Y').date()
+            except (ValueError, AttributeError):
+                logger.warning(f"Failed to parse date: {date_str}")
+                return None
+
+    def _parse_amount(self, amount_str: str) -> Optional[Decimal]:
+        """
+        Parse amount string to Decimal, handling commas and negatives (T017).
+
+        Args:
+            amount_str: Amount string from PDF (e.g., "1,234.56", "-15.50", "$77.37")
+
+        Returns:
+            Decimal value if parsing succeeds, None otherwise
+
+        Example:
+            amt = self._parse_amount("1,234.56")  # -> Decimal("1234.56")
+            amt = self._parse_amount("-$15.50")   # -> Decimal("-15.50")
+        """
+        if not amount_str:
+            return None
+
+        try:
+            # Remove currency symbols and commas
+            cleaned = amount_str.replace('$', '').replace(',', '').strip()
+            return Decimal(cleaned)
+        except (ValueError, Exception) as e:
+            logger.warning(f"Failed to parse amount: {amount_str}, error: {e}")
+            return None
+
+    async def _extract_credit_transactions(self, text: str) -> List[Dict]:
+        """
+        Extract credit card transactions from PDF text using regex (T018).
+
+        Args:
+            text: Extracted text from PDF
+
+        Returns:
+            List of transaction data dictionaries
+
+        Note:
+            Handles extraction errors gracefully by creating incomplete transactions
+        """
+        transactions = []
+
+        # Apply master transaction pattern to extract all matches
+        for match in self.transaction_pattern.finditer(text):
+            try:
+                # Extract fields from regex groups
+                employee_name = match.group(1).strip() if match.group(1) else None
+                expense_type = match.group(2).strip() if match.group(2) else None
+                date_str = match.group(3).strip() if match.group(3) else None
+                amount_str = match.group(4).strip() if match.group(4) else None
+                merchant_name = match.group(5).strip() if match.group(5) else None
+                merchant_address = match.group(6).strip() if match.group(6) else None
+                status = match.group(7).strip() if match.group(7) else None
+
+                # Parse date and amount
+                transaction_date = self._parse_date(date_str) if date_str else None
+                amount = self._parse_amount(amount_str) if amount_str else None
+
+                # Resolve employee_id via alias repository
+                employee_id = None
+                if self.alias_repo and employee_name:
+                    employee_id = await self.alias_repo.resolve_employee_id(employee_name)
+
+                # Determine flags
+                incomplete_flag = any([
+                    transaction_date is None,
+                    amount is None,
+                    employee_id is None,
+                    merchant_name is None or len(merchant_name) == 0
+                ])
+
+                is_credit = amount is not None and amount < 0
+
+                # Build transaction dict
+                transaction = {
+                    "employee_id": employee_id,
+                    "transaction_date": transaction_date,
+                    "amount": amount,
+                    "merchant_name": merchant_name,
+                    "merchant_address": merchant_address,
+                    "expense_type": expense_type,
+                    "incomplete_flag": incomplete_flag,
+                    "is_credit": is_credit,
+                    "raw_data": {
+                        "raw_text": match.group(0),
+                        "extracted_fields": {
+                            "employee_name": employee_name,
+                            "expense_type": expense_type,
+                            "status": status
+                        }
+                    }
+                }
+
+                transactions.append(transaction)
+
+            except (ValueError, AttributeError, KeyError) as e:
+                # Handle extraction errors - create incomplete transaction with error
+                logger.warning(f"Failed to parse transaction: {e}")
+                transactions.append({
+                    "employee_id": None,
+                    "transaction_date": None,
+                    "amount": None,
+                    "merchant_name": "EXTRACTION_ERROR",
+                    "incomplete_flag": True,
+                    "is_credit": False,
+                    "raw_data": {
+                        "error": str(e),
+                        "raw_text": match.group(0) if match else ""
+                    }
+                })
+
+        return transactions
 
     async def extract_employees(self, pdf_path: Path) -> List[Dict]:
         """
@@ -119,7 +310,7 @@ class ExtractionService:
             session_id: UUID of the session
 
         Returns:
-            List of transaction data dictionaries
+            List of transaction data dictionaries with all fields populated
 
         Example:
             transactions = await service.extract_transactions(
@@ -128,36 +319,32 @@ class ExtractionService:
             )
             # Returns: [
             #     {
-            #         "transaction_date": date(2025, 10, 1),
-            #         "amount": Decimal("125.50"),
-            #         "merchant_name": "Office Depot",
-            #         "description": "Office supplies",
-            #         "card_last_four": "1234"
+            #         "employee_id": UUID(...),
+            #         "transaction_date": date(2025, 3, 24),
+            #         "amount": Decimal("77.37"),
+            #         "merchant_name": "CHEVRON 0308017",
+            #         "merchant_address": "27952 WALKER SOUTH",
+            #         "expense_type": "Fuel",
+            #         "incomplete_flag": False,
+            #         "is_credit": False,
+            #         "raw_data": {"raw_text": "...", "extracted_fields": {...}}
             #     },
             #     ...
             # ]
 
         Note:
-            This is a placeholder implementation. Real implementation would
-            parse transaction lines from credit card statement PDFs.
+            Uses pdfplumber for text extraction and regex patterns for parsing.
+            Replaces placeholder implementation with real PDF extraction.
         """
-        transactions = []
+        # Extract text from PDF using pdfplumber (T016)
+        text = self._extract_text(pdf_path)
 
-        # TODO: Implement actual PDF parsing
-        # with open(pdf_path, 'rb') as f:
-        #     pdf_reader = PyPDF2.PdfReader(f)
-        #     for page in pdf_reader.pages:
-        #         text = page.extract_text()
-        #         transactions.extend(self._parse_transaction_text(text))
+        # Extract transactions using regex patterns (T018)
+        transactions = await self._extract_credit_transactions(text)
 
-        # Placeholder: Return mock data for now
-        transactions.append({
-            "transaction_date": date.today(),
-            "amount": Decimal("100.00"),
-            "merchant_name": "PLACEHOLDER_MERCHANT",
-            "description": "Extracted from PDF",
-            "card_last_four": "0000"
-        })
+        # Add session_id to each transaction
+        for transaction in transactions:
+            transaction["session_id"] = session_id
 
         return transactions
 

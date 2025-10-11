@@ -9,6 +9,7 @@ from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
+from ..repositories.alias_repository import AliasRepository
 from ..repositories.employee_repository import EmployeeRepository
 from ..repositories.match_result_repository import MatchResultRepository
 from ..repositories.progress_repository import ProgressRepository
@@ -52,6 +53,11 @@ def get_progress_repository(db: AsyncSession = Depends(get_db)) -> ProgressRepos
     return ProgressRepository(db)
 
 
+def get_alias_repository(db: AsyncSession = Depends(get_db)) -> AliasRepository:
+    """Get AliasRepository instance."""
+    return AliasRepository(db)
+
+
 # Service dependencies
 def get_upload_service(
     session_repo: SessionRepository = Depends(get_session_repository),
@@ -66,11 +72,12 @@ def get_extraction_service(
     employee_repo: EmployeeRepository = Depends(get_employee_repository),
     transaction_repo: TransactionRepository = Depends(get_transaction_repository),
     receipt_repo: ReceiptRepository = Depends(get_receipt_repository),
-    progress_repo: ProgressRepository = Depends(get_progress_repository)
+    progress_repo: ProgressRepository = Depends(get_progress_repository),
+    alias_repo: AliasRepository = Depends(get_alias_repository)
 ) -> ExtractionService:
     """Get ExtractionService instance."""
     return ExtractionService(
-        session_repo, employee_repo, transaction_repo, receipt_repo, progress_repo
+        session_repo, employee_repo, transaction_repo, receipt_repo, progress_repo, alias_repo
     )
 
 

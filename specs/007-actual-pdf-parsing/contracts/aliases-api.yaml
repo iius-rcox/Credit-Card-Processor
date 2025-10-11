@@ -1,0 +1,122 @@
+openapi: 3.0.0
+info:
+  title: Employee Alias API
+  version: 1.0.0
+  description: API for managing employee name aliases for PDF extraction
+
+paths:
+  /api/aliases:
+    post:
+      summary: Create employee alias
+      description: Maps an extracted employee name from PDF to an existing employee record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - extractedName
+                - employeeId
+              properties:
+                extractedName:
+                  type: string
+                  description: Employee name as it appears in PDF (case-sensitive)
+                  example: "JOHNSMITH"
+                employeeId:
+                  type: string
+                  format: uuid
+                  description: UUID of existing employee to map to
+                  example: "123e4567-e89b-12d3-a456-426614174000"
+      responses:
+        '201':
+          description: Alias created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmployeeAlias'
+        '400':
+          description: Bad request (alias already exists or invalid input)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Employee not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    get:
+      summary: List all employee aliases
+      description: Returns all employee name aliases with their associated employee details
+      responses:
+        '200':
+          description: List of aliases
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  aliases:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/EmployeeAliasWithEmployee'
+
+  /api/aliases/{id}:
+    delete:
+      summary: Delete employee alias
+      description: Removes an employee alias mapping
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Alias deleted successfully
+        '404':
+          description: Alias not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    EmployeeAlias:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        extractedName:
+          type: string
+        employeeId:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+
+    EmployeeAliasWithEmployee:
+      allOf:
+        - $ref: '#/components/schemas/EmployeeAlias'
+        - type: object
+          properties:
+            employee:
+              type: object
+              properties:
+                name:
+                  type: string
+                email:
+                  type: string
+
+    Error:
+      type: object
+      properties:
+        detail:
+          type: string

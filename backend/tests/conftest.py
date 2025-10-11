@@ -16,8 +16,9 @@ from src.models.session import Base
 from src.config import settings
 
 
-# Test database URL (use in-memory SQLite or test PostgreSQL)
-TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+# Test database URL
+# Using PostgreSQL for tests to match production and support JSONB types
+TEST_DATABASE_URL = "postgresql+asyncpg://ccprocessor:password@localhost:5432/credit_card_db_test"
 
 
 @pytest.fixture(scope="session")

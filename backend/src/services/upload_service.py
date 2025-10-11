@@ -493,6 +493,7 @@ async def process_session_background(
     from ..repositories.receipt_repository import ReceiptRepository
     from ..repositories.match_result_repository import MatchResultRepository
     from ..repositories.progress_repository import ProgressRepository
+    from ..repositories.alias_repository import AliasRepository
     from .extraction_service import ExtractionService
     from .matching_service import MatchingService
 
@@ -535,9 +536,10 @@ async def process_session_background(
                 receipt_repo = ReceiptRepository(db)
                 match_result_repo = MatchResultRepository(db)
                 progress_repo = ProgressRepository(db)
+                alias_repo = AliasRepository(db)
 
                 extraction_service = ExtractionService(
-                    session_repo, employee_repo, transaction_repo, receipt_repo, progress_repo
+                    session_repo, employee_repo, transaction_repo, receipt_repo, progress_repo, alias_repo
                 )
                 matching_service = MatchingService(
                     session_repo, transaction_repo, receipt_repo, match_result_repo

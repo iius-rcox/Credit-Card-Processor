@@ -28,6 +28,8 @@
       "mcp__chrome-devtools__list_console_messages",
       "mcp__chrome-devtools__take_screenshot",
       "mcp__chrome-devtools__take_snapshot",
+      "mcp__Ref__ref_read_url",
+      "mcp__Ref__ref_search_documentation",
       "Bash(docker push:*)",
       "Bash(kubectl set image:*)",
       "Bash(kubectl rollout status:*)",
@@ -58,7 +60,17 @@
       "Bash(alembic revision:*)",
       "Bash(alembic upgrade:*)",
       "Bash(del /F frontendnul frontendsrcnul)",
-      "Bash(docker restart:*)"
+      "Bash(docker restart:*)",
+      "Bash(.specify/scripts/bash/create-new-feature.sh:*)",
+      "Bash(.specify/scripts/bash/check-prerequisites.sh:*)",
+      "Bash(where redis-server)",
+      "Bash(where docker)",
+      "Bash(celery:*)",
+      "Bash(netstat:*)",
+      "Bash(dir:*)",
+      "Bash(.specify/scripts/bash/setup-plan.sh:*)",
+      "Bash(mkdir:*)",
+      "Bash(.specify/scripts/bash/update-agent-context.sh:*)"
     ],
     "deny": [],
     "ask": []

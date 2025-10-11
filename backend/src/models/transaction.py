@@ -11,6 +11,7 @@ from typing import Optional
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    Boolean,
     CHAR,
     CheckConstraint,
     Column,
@@ -43,7 +44,7 @@ class Transaction(Base):
         employee_id: Employee who made the transaction (FK)
         transaction_date: Date of transaction
         post_date: Date transaction posted to account (optional)
-        amount: Transaction amount (positive values only)
+        amount: Transaction amount (can be negative for credits/refunds)
         currency: ISO 4217 currency code (default: USD)
         merchant_name: Merchant/vendor name
         merchant_category: MCC category (optional)
@@ -51,6 +52,8 @@ class Transaction(Base):
         card_last_four: Last 4 digits of card used (optional)
         reference_number: Bank reference or transaction ID (optional)
         raw_data: Original transaction data from source file (JSONB)
+        incomplete_flag: True when required fields are missing from extraction
+        is_credit: True when amount is negative (refund/credit)
         created_at: Record creation timestamp
     """
 
@@ -133,6 +136,19 @@ class Transaction(Base):
         nullable=True
     )
 
+    # Extraction quality flags
+    incomplete_flag: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default=text("false")
+    )
+
+    is_credit: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default=text("false")
+    )
+
     # Timestamp
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -160,10 +176,7 @@ class Transaction(Base):
 
     # Table constraints
     __table_args__ = (
-        CheckConstraint(
-            "amount > 0",
-            name="chk_transactions_amount"
-        ),
+        # Note: Removed CheckConstraint for amount > 0 to allow negative amounts (credits/refunds)
         CheckConstraint(
             "post_date IS NULL OR post_date >= transaction_date",
             name="chk_transactions_post_date"

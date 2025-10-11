@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 
 from .config import settings
 from .database import close_db, init_db
-from .api.routes import health, progress, reports, sessions, upload
+from .api.routes import aliases, health, progress, reports, sessions, upload
 from .api.middleware import LoggingMiddleware
 
 
@@ -87,6 +87,7 @@ app.include_router(upload.router, prefix=settings.API_V1_PREFIX)
 app.include_router(sessions.router, prefix=settings.API_V1_PREFIX)
 app.include_router(progress.router, prefix=settings.API_V1_PREFIX)
 app.include_router(reports.router, prefix=settings.API_V1_PREFIX)
+app.include_router(aliases.router)
 
 
 # Global exception handler
