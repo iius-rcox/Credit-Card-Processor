@@ -104,7 +104,7 @@ class Settings(BaseSettings):
 
     # CORS settings
     CORS_ORIGINS: list[str] = Field(
-        default=["http://localhost:3000", "https://credit-card.ii-us.com"],
+        default=["http://localhost:3000", "http://localhost:3001", "https://credit-card.ii-us.com"],
         description="Allowed CORS origins"
     )
 

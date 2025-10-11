@@ -100,6 +100,13 @@ class Employee(Base):
         lazy="selectin"
     )
 
+    aliases: Mapped[list["EmployeeAlias"]] = relationship(
+        "EmployeeAlias",
+        back_populates="employee",
+        cascade="all, delete",
+        passive_deletes=True
+    )
+
     # Table constraints
     __table_args__ = (
         UniqueConstraint(

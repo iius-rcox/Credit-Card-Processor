@@ -138,6 +138,43 @@ class PaginatedSessionsResponse(BaseModel):
         )
 
 
+# Employee Alias schemas
+class EmployeeAliasCreate(BaseModel):
+    """Request schema for creating employee alias."""
+    extractedName: str = Field(..., min_length=1, max_length=255, description="Employee name as it appears in PDF")
+    employeeId: UUID = Field(..., description="UUID of existing employee to map to")
+
+
+class EmployeeAliasResponse(BaseModel):
+    """Response schema for employee alias."""
+    id: UUID
+    extractedName: str
+    employeeId: UUID
+    createdAt: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class EmployeeInfo(BaseModel):
+    """Nested employee information in alias response."""
+    name: str
+    email: Optional[str] = None
+
+
+class EmployeeAliasWithEmployee(BaseModel):
+    """Employee alias with nested employee details."""
+    id: UUID
+    extractedName: str
+    employeeId: UUID
+    createdAt: datetime
+    employee: EmployeeInfo
+
+
+class AliasListResponse(BaseModel):
+    """Response schema for list of aliases."""
+    aliases: List[EmployeeAliasWithEmployee]
+
+
 # Error response
 class ErrorResponse(BaseModel):
     """Error response schema."""
