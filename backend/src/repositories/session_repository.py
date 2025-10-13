@@ -250,19 +250,46 @@ class SessionRepository:
 
     async def update_session_status(self, session_id: UUID, status: str) -> None:
         """
-        Update session status.
+        Update session status with validation and logging.
 
         Args:
             session_id: UUID of the session
-            status: New status (processing/completed/failed/expired)
+            status: New status (processing/extracting/matching/completed/failed/expired)
+
+        Raises:
+            ValueError: If status is invalid or transition is not allowed
         """
+        import logging
+        logger = logging.getLogger(__name__)
+
+        # Get current session to validate transition
+        session = await self.get_session_by_id(session_id)
+        if not session:
+            logger.error(f"Cannot update status for non-existent session: {session_id}")
+            return
+
+        old_status = session.status
+
+        # Validate status transition using Session model's validation
+        try:
+            Session.validate_status_transition(old_status, status)
+            logger.info(
+                f"Session {session_id} status transition: {old_status} -> {status}"
+            )
+        except ValueError as e:
+            logger.error(f"Invalid status transition for session {session_id}: {e}")
+            raise
+
+        # Update status
         stmt = (
             update(Session)
             .where(Session.id == session_id)
-            .values(status=status)
+            .values(status=status, updated_at=datetime.utcnow())
         )
         await self.db.execute(stmt)
         await self.db.flush()
+
+        logger.info(f"Session {session_id} status updated successfully to {status}")
 
         # Clean up progress data when session completes
         if status in ["completed", "failed"]:

@@ -1,0 +1,186 @@
+
+================================================================================
+Analyzing: Cardholder+Activity+Report+General-S-89S,DD2LJ,DFRHA (6).pdf
+================================================================================
+
+PDF has 178 pages
+
+
+--------------------------------------------------------------------------------
+PAGE 1
+--------------------------------------------------------------------------------
+
+First 500 characters:
+Cardholder Activity Report General
+Produced On: 4/16/2025 9:25:36AM Card Token: ALL
+Posted Date between 3/1/2025 and 3/31/2025 Employee Number: ALL
+Card First Name: ALL
+Account Code: S-89S
+Card Last Name: ALL
+Customer ID: DD2LJ,DFRHA
+Primary Sort: TRANSACTION DATE
+From Date: 3/1/2025
+Secondary Sort: -NONE-
+To Date: 3/31/2025
+Account Code: S-89S - INSULATIONS, LLC INSULATIONS, LLC
+Customer ID: DD2LJ 880 W. COMMERCE RD #104
+Card Number: 556735XXXXXX0028 HARAHAN, LA 70123-0000
+Cardholder Name: WILL
+
+First 15 lines (with repr to show spacing):
+Line  1: 'Cardholder Activity Report General'
+Line  2: 'Produced On: 4/16/2025 9:25:36AM Card Token: ALL'
+Line  3: 'Posted Date between 3/1/2025 and 3/31/2025 Employee Number: ALL'
+Line  4: 'Card First Name: ALL'
+Line  5: 'Account Code: S-89S'
+Line  6: 'Card Last Name: ALL'
+Line  7: 'Customer ID: DD2LJ,DFRHA'
+Line  8: 'Primary Sort: TRANSACTION DATE'
+Line  9: 'From Date: 3/1/2025'
+Line 10: 'Secondary Sort: -NONE-'
+Line 11: 'To Date: 3/31/2025'
+Line 12: 'Account Code: S-89S - INSULATIONS, LLC INSULATIONS, LLC'
+Line 13: 'Customer ID: DD2LJ 880 W. COMMERCE RD #104'
+Line 14: 'Card Number: 556735XXXXXX0028 HARAHAN, LA 70123-0000'
+Line 15: 'Cardholder Name: WILLIAMBURT'
+
+Pattern Detection:
+FOUND: 'Cardholder Name' pattern
+  > 'Cardholder Name: WILLIAMBURT'
+
+FOUND: 11 lines with dates (first 5):
+  > 'Produced On: 4/16/2025 9:25:36AM Card Token: ALL'
+  > 'Posted Date between 3/1/2025 and 3/31/2025 Employee Number: ALL'
+  > 'From Date: 3/1/2025'
+  > 'To Date: 3/31/2025'
+  > '03/03/2025 03/04/2025 N 000425061 OVERHEAD DOOR COMKPEMAH, TX MISC OOTTHHEERR MMIISSCCEELLLLAANNEEOOUUSS TTRRAANNSS 768.22000 1.00 $768.22 $0.00 $768.22'
+
+FOUND: 13 lines with dollar amounts (first 5):
+  > '03/03/2025 03/04/2025 N 000425061 OVERHEAD DOOR COMKPEMAH, TX MISC OOTTHHEERR MMIISSCCEELLLLAANNEEOOUUSS TTRRAANNSS 768.22000 1.00 $768.22 $0.00 $768.22'
+  > 'Transaction Totals: $768.22 $0.00 $768.22'
+  > '03/04/2025 03/06/2025 F 000127739 SHELL OIL129799150 MONTGOMERY, TX FUEL UUNNLL RREEGG 8866//8877 OOCC 2.76054 13.28 $36.66 $0.00 $36.66'
+  > 'Transaction Totals: $36.66 $0.00 $36.66'
+  > '03/09/2025 03/11/2025 L 000196796 KROGER FUEL #7142 MONTGOMERY, TX FUEL MMIISSCC OOTTHHEERR 2.89519 -0.16 -$0.45 $0.00 -$0.45'
+
+Statistics:
+  Total characters: 2,472
+  Total lines: 36
+  Average line length: 68.7 chars
+  Lines with dates: 11
+  Lines with amounts: 13
+
+--------------------------------------------------------------------------------
+PAGE 2
+--------------------------------------------------------------------------------
+
+First 500 characters:
+Account Code: S-89S - INSULATIONS, LLC INSULATIONS, LLC
+Customer ID: DD2LJ 880 W. COMMERCE RD #104
+Card Number: 556735XXXXXX0028 HARAHAN, LA 70123-0000
+Cardholder Name: WILLIAMBURT
+Employee ID: 960904
+Trans Date Posted Date Lvl Transaction # Merchant Name City, State Merchant Group Product Description PPU/G Quantity Gross Cost Discount Net Cost
+Transaction Totals: $70.07 $0.00 $70.07
+03/26/2025 03/27/2025 N 000315304 AIR SPECIALIST HEA PEARLAND, TX MISC 523.93000 1.00 $523.93 $0.00 $523.93
+Trans
+
+First 15 lines (with repr to show spacing):
+Line  1: 'Account Code: S-89S - INSULATIONS, LLC INSULATIONS, LLC'
+Line  2: 'Customer ID: DD2LJ 880 W. COMMERCE RD #104'
+Line  3: 'Card Number: 556735XXXXXX0028 HARAHAN, LA 70123-0000'
+Line  4: 'Cardholder Name: WILLIAMBURT'
+Line  5: 'Employee ID: 960904'
+Line  6: 'Trans Date Posted Date Lvl Transaction # Merchant Name City, State Merchant Group Product Description PPU/G Quantity Gross Cost Discount Net Cost'
+Line  7: 'Transaction Totals: $70.07 $0.00 $70.07'
+Line  8: '03/26/2025 03/27/2025 N 000315304 AIR SPECIALIST HEA PEARLAND, TX MISC 523.93000 1.00 $523.93 $0.00 $523.93'
+Line  9: 'Transaction Totals: $523.93 $0.00 $523.93'
+Line 10: '03/28/2025 03/30/2025 N 000125718 RESIDENCE INN NO E NEW ORLEANS, LA HOTELS OOTTHHEERR MMIISSCCEELLLLAANNEEOOUUSS TTRRAANNSS 577.85000 1.00 $577.85 $0.00 $577.85'
+Line 11: 'Transaction Totals: $577.85 $0.00 $577.85'
+Line 12: '03/28/2025 03/30/2025 N 000169582 GROUND PATI METAIRIE, LA RESTAURANTS OOTTHHEERR MMIISSCCEELLLLAANNEEOOUUSS TTRRAANNSS 128.87000 1.00 $128.87 $0.00 $128.87'
+Line 13: 'Transaction Totals: $128.87 $0.00 $128.87'
+Line 14: '03/28/2025 03/29/2025 F 000421848 CHEVRON 0384005 SULPHUR, LA FUEL MMIISSCC FFUUEELL 3.09877 12.18 $37.74 $0.00 $37.74'
+Line 15: 'Transaction Totals: $37.74 $0.00 $37.74'
+
+Pattern Detection:
+FOUND: 'Cardholder Name' pattern
+  > 'Cardholder Name: WILLIAMBURT'
+
+FOUND: 4 lines with dates (first 5):
+  > '03/26/2025 03/27/2025 N 000315304 AIR SPECIALIST HEA PEARLAND, TX MISC 523.93000 1.00 $523.93 $0.00 $523.93'
+  > '03/28/2025 03/30/2025 N 000125718 RESIDENCE INN NO E NEW ORLEANS, LA HOTELS OOTTHHEERR MMIISSCCEELLLLAANNEEOOUUSS TTRRAANNSS 577.85000 1.00 $577.85 $0.00 $577.85'
+  > '03/28/2025 03/30/2025 N 000169582 GROUND PATI METAIRIE, LA RESTAURANTS OOTTHHEERR MMIISSCCEELLLLAANNEEOOUUSS TTRRAANNSS 128.87000 1.00 $128.87 $0.00 $128.87'
+  > '03/28/2025 03/29/2025 F 000421848 CHEVRON 0384005 SULPHUR, LA FUEL MMIISSCC FFUUEELL 3.09877 12.18 $37.74 $0.00 $37.74'
+
+FOUND: 9 lines with dollar amounts (first 5):
+  > 'Transaction Totals: $70.07 $0.00 $70.07'
+  > '03/26/2025 03/27/2025 N 000315304 AIR SPECIALIST HEA PEARLAND, TX MISC 523.93000 1.00 $523.93 $0.00 $523.93'
+  > 'Transaction Totals: $523.93 $0.00 $523.93'
+  > '03/28/2025 03/30/2025 N 000125718 RESIDENCE INN NO E NEW ORLEANS, LA HOTELS OOTTHHEERR MMIISSCCEELLLLAANNEEOOUUSS TTRRAANNSS 577.85000 1.00 $577.85 $0.00 $577.85'
+  > 'Transaction Totals: $577.85 $0.00 $577.85'
+
+Statistics:
+  Total characters: 1,682
+  Total lines: 21
+  Average line length: 80.1 chars
+  Lines with dates: 4
+  Lines with amounts: 9
+
+--------------------------------------------------------------------------------
+PAGE 3
+--------------------------------------------------------------------------------
+
+First 500 characters:
+Account Code: S-89S - INSULATIONS, LLC INSULATIONS, LLC
+Customer ID: DD2LJ 7186 AIRLINE HWY
+Card Number: 556735XXXXXX0035 BATON ROUGE, LA 70805-0000
+Cardholder Name: RICHARDBREEDLOVE
+Employee ID: 306905
+Trans Date Posted Date Lvl Transaction # Merchant Name City, State Merchant Group Product Description PPU/G Quantity Gross Cost Discount Net Cost
+02/28/2025 03/01/2025 N 000117645 TST* WALK-ON'S - B BRUSLY, LA RESTAURANTS OOTTHHEERR MMIISSCCEELLLLAANNEEOOUUSS TTRRAANNSS 98.86000 1.00 $98.86 $0.00
+
+First 15 lines (with repr to show spacing):
+Line  1: 'Account Code: S-89S - INSULATIONS, LLC INSULATIONS, LLC'
+Line  2: 'Customer ID: DD2LJ 7186 AIRLINE HWY'
+Line  3: 'Card Number: 556735XXXXXX0035 BATON ROUGE, LA 70805-0000'
+Line  4: 'Cardholder Name: RICHARDBREEDLOVE'
+Line  5: 'Employee ID: 306905'
+Line  6: 'Trans Date Posted Date Lvl Transaction # Merchant Name City, State Merchant Group Product Description PPU/G Quantity Gross Cost Discount Net Cost'
+Line  7: "02/28/2025 03/01/2025 N 000117645 TST* WALK-ON'S - B BRUSLY, LA RESTAURANTS OOTTHHEERR MMIISSCCEELLLLAANNEEOOUUSS TTRRAANNSS 98.86000 1.00 $98.86 $0.00 $98.86"
+Line  8: 'Transaction Totals: $98.86 $0.00 $98.86'
+Line  9: '02/28/2025 03/01/2025 N 000118821 REMARKABLE OSLO, CN MISC OOTTHHEERR MMIISSCCEELLLLAANNEEOOUUSS TTRRAANNSS 3.32000 1.00 $3.32 $0.00 $3.32'
+Line 10: 'Transaction Totals: $3.32 $0.00 $3.32'
+Line 11: "03/07/2025 03/08/2025 F 000581503 EXXON DAVID'S TIGE BATON ROUGE, LA FUEL DD22 LLSS PPRREEMM 2.98989 22.77 $68.31 $0.23 $68.08"
+Line 12: 'Transaction Totals: $68.31 $0.23 $68.08'
+Line 13: "03/14/2025 03/15/2025 F 000505603 EXXON DAVID'S TIGE BATON ROUGE, LA FUEL DD22 LLSS PPRREEMM 2.98968 23.26 $69.77 $0.23 $69.54"
+Line 14: 'Transaction Totals: $69.77 $0.23 $69.54'
+Line 15: '03/23/2025 03/24/2025 F 000050986 CHEVRON 0308017 WALKER, LA FUEL DD22 LLSS 3.29893 23.45 $77.37 $0.00 $77.37'
+
+Pattern Detection:
+FOUND: 'Cardholder Name' pattern
+  > 'Cardholder Name: RICHARDBREEDLOVE'
+
+FOUND: 10 lines with dates (first 5):
+  > "02/28/2025 03/01/2025 N 000117645 TST* WALK-ON'S - B BRUSLY, LA RESTAURANTS OOTTHHEERR MMIISSCCEELLLLAANNEEOOUUSS TTRRAANNSS 98.86000 1.00 $98.86 $0.00 $98.86"
+  > '02/28/2025 03/01/2025 N 000118821 REMARKABLE OSLO, CN MISC OOTTHHEERR MMIISSCCEELLLLAANNEEOOUUSS TTRRAANNSS 3.32000 1.00 $3.32 $0.00 $3.32'
+  > "03/07/2025 03/08/2025 F 000581503 EXXON DAVID'S TIGE BATON ROUGE, LA FUEL DD22 LLSS PPRREEMM 2.98989 22.77 $68.31 $0.23 $68.08"
+  > "03/14/2025 03/15/2025 F 000505603 EXXON DAVID'S TIGE BATON ROUGE, LA FUEL DD22 LLSS PPRREEMM 2.98968 23.26 $69.77 $0.23 $69.54"
+  > '03/23/2025 03/24/2025 F 000050986 CHEVRON 0308017 WALKER, LA FUEL DD22 LLSS 3.29893 23.45 $77.37 $0.00 $77.37'
+
+FOUND: 20 lines with dollar amounts (first 5):
+  > "02/28/2025 03/01/2025 N 000117645 TST* WALK-ON'S - B BRUSLY, LA RESTAURANTS OOTTHHEERR MMIISSCCEELLLLAANNEEOOUUSS TTRRAANNSS 98.86000 1.00 $98.86 $0.00 $98.86"
+  > 'Transaction Totals: $98.86 $0.00 $98.86'
+  > '02/28/2025 03/01/2025 N 000118821 REMARKABLE OSLO, CN MISC OOTTHHEERR MMIISSCCEELLLLAANNEEOOUUSS TTRRAANNSS 3.32000 1.00 $3.32 $0.00 $3.32'
+  > 'Transaction Totals: $3.32 $0.00 $3.32'
+  > "03/07/2025 03/08/2025 F 000581503 EXXON DAVID'S TIGE BATON ROUGE, LA FUEL DD22 LLSS PPRREEMM 2.98989 22.77 $68.31 $0.23 $68.08"
+
+Statistics:
+  Total characters: 2,775
+  Total lines: 32
+  Average line length: 86.7 chars
+  Lines with dates: 10
+  Lines with amounts: 20
+
+================================================================================
+Analysis complete!
+================================================================================
+

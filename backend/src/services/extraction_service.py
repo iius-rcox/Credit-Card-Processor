@@ -90,6 +90,7 @@ class ExtractionService:
         # WEX transaction pattern (space-separated columns)
         # Format: 03/03/2025 03/04/2025 N 000425061 OVERHEAD DOOR COMKPEMAH, TX MISC ... $768.22
         # Key insight: Merchant name ends at comma (before state abbreviation)
+        # Note: Product Description may have doubled chars (OOTTHHEERR) or be numeric (523.93000)
         self.transaction_pattern = re.compile(
             r'^(\d{2}/\d{2}/\d{4})\s+'  # Trans Date
             r'(\d{2}/\d{2}/\d{4})\s+'  # Posted Date
@@ -98,11 +99,11 @@ class ExtractionService:
             r'(.+?),\s*'  # Merchant Name (everything until comma)
             r'([A-Z]{2})\s+'  # State (2 letters after comma)
             r'([A-Z]+)\s+'  # Merchant Group (FUEL, MISC, etc.)
-            r'(.+?)\s+'  # Product Description
-            r'[\d,]+\.?\d*\s+'  # PPU/G
-            r'[-]?[\d,]+\.?\d*\s+'  # Quantity
-            r'\$[-]?[\d,]+\.\d{2}\s+'  # Gross Cost
-            r'\$[-]?[\d,]+\.\d{2}\s+'  # Discount
+            r'(.+?)\s+(?=[\d,]+\.[\d]+\s+[-]?[\d,]+\.[\d]+\s+\$)'  # Product Description (until PPU/G pattern detected via lookahead)
+            r'([\d,]+\.?\d+)\s+'  # PPU/G (decimal number)
+            r'([-]?[\d,]+\.?\d+)\s+'  # Quantity (can be negative)
+            r'\$([-]?[\d,]+\.\d{2})\s+'  # Gross Cost
+            r'\$([-]?[\d,]+\.\d{2})\s+'  # Discount
             r'(\$[-]?[\d,]+\.\d{2})$',  # Net Cost (final amount)
             re.MULTILINE
         )
@@ -134,6 +135,13 @@ class ExtractionService:
         # Validate that we extracted some text (not a scanned image)
         if not text or len(text.strip()) == 0:
             raise Exception("Scanned image PDF not supported. Please upload text-based PDF.")
+
+        # Debug logging to help diagnose extraction issues
+        logger.info(f"[PDF_TEXT] Extracted {len(text)} characters from PDF")
+        logger.info(f"[PDF_TEXT] First 500 characters: {text[:500]}")
+        logger.info(f"[PDF_TEXT] First 5 lines:")
+        for i, line in enumerate(text.split('\n')[:5], 1):
+            logger.info(f"[PDF_TEXT]   Line {i}: {repr(line)[:100]}")
 
         return text
 
@@ -207,9 +215,15 @@ class ExtractionService:
 
         # Extract employee name from section header
         employee_name = None
+        logger.info(f"[REGEX_DEBUG] Searching for employee header in text ({len(text)} chars)")
         employee_header_match = self.employee_header_pattern.search(text)
         if employee_header_match:
             employee_name = employee_header_match.group(1).strip()
+            logger.info(f"[REGEX_DEBUG] Found employee: {employee_name}")
+        else:
+            logger.warning(f"[REGEX_DEBUG] Employee header pattern NOT matched")
+            logger.warning(f"[REGEX_DEBUG] Pattern: {self.employee_header_pattern.pattern}")
+            logger.warning(f"[REGEX_DEBUG] Sample text (first 200 chars): {text[:200]}")
 
         # Resolve employee_id once for all transactions in this section
         employee_id = None
@@ -217,7 +231,19 @@ class ExtractionService:
             employee_id = await self.alias_repo.resolve_employee_id(employee_name)
 
         # Apply master transaction pattern to extract all matches
-        for match in self.transaction_pattern.finditer(text):
+        logger.info(f"[REGEX_DEBUG] Attempting transaction pattern matching...")
+        matches_list = list(self.transaction_pattern.finditer(text))
+        logger.info(f"[REGEX_DEBUG] Transaction pattern found {len(matches_list)} matches")
+
+        if len(matches_list) == 0:
+            logger.warning(f"[REGEX_DEBUG] Transaction pattern DID NOT MATCH")
+            logger.warning(f"[REGEX_DEBUG] Pattern expects: MM/DD/YYYY MM/DD/YYYY L NNNN MERCHANT, ST GROUP DESC PPU QTY $GROSS $DISC $NET")
+            logger.warning(f"[REGEX_DEBUG] Sample transaction lines from PDF:")
+            for i, line in enumerate(text.split('\n')[5:15], 1):  # Skip header lines
+                if line.strip() and any(c.isdigit() for c in line[:10]):  # Lines starting with digits
+                    logger.warning(f"[REGEX_DEBUG]   Sample {i}: {repr(line)[:150]}")
+
+        for match in matches_list:
             try:
                 # Extract fields from regex groups (WEX format)
                 trans_date_str = match.group(1).strip() if match.group(1) else None  # Trans Date
@@ -609,7 +635,8 @@ class ExtractionService:
             # Update session counts
             await self.session_repo.update_session_counts(session_id)
 
-            # Update status to matching (next phase)
+            # Update status to matching phase (next phase after extraction completes)
+            # Database constraint now supports: processing, extracting, matching, completed, failed, expired
             await self.session_repo.update_session_status(session_id, "matching")
 
         except Exception as e:
@@ -695,7 +722,8 @@ class ExtractionService:
             # Update session counts
             await self.session_repo.update_session_counts(session_id)
 
-            # Update status to matching (next phase)
+            # Update status to matching phase (next phase after extraction completes)
+            # Database constraint now supports: processing, extracting, matching, completed, failed, expired
             await self.session_repo.update_session_status(session_id, "matching")
 
         except Exception as e:

@@ -51,6 +51,25 @@ class Session(Base):
 
     __tablename__ = "sessions"
 
+    # Status validation constants
+    VALID_STATUSES = [
+        'processing',
+        'extracting',
+        'matching',
+        'completed',
+        'failed',
+        'expired'
+    ]
+
+    VALID_TRANSITIONS = {
+        'processing': ['extracting', 'matching', 'completed', 'failed'],
+        'extracting': ['matching', 'completed', 'failed'],
+        'matching': ['completed', 'failed'],
+        'completed': [],
+        'failed': [],
+        'expired': []
+    }
+
     # Primary key
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
@@ -172,7 +191,7 @@ class Session(Base):
     # Table constraints
     __table_args__ = (
         CheckConstraint(
-            "status IN ('processing', 'completed', 'failed', 'expired')",
+            "status IN ('processing', 'extracting', 'matching', 'completed', 'failed', 'expired')",
             name="chk_sessions_status"
         ),
         CheckConstraint(
@@ -206,3 +225,45 @@ class Session(Base):
             f"<Session(id={self.id}, status={self.status}, "
             f"created_at={self.created_at}, expires_at={self.expires_at})>"
         )
+
+    @classmethod
+    def validate_status_transition(cls, from_status: str, to_status: str) -> bool:
+        """
+        Validate if a status transition is allowed.
+
+        Args:
+            from_status: Current session status
+            to_status: Desired new status
+
+        Returns:
+            True if transition is valid, False otherwise
+
+        Raises:
+            ValueError: If either status is not in VALID_STATUSES
+
+        Example:
+            >>> Session.validate_status_transition('processing', 'matching')
+            True
+            >>> Session.validate_status_transition('completed', 'processing')
+            False
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+
+        # Validate that both statuses are in the allowed list
+        if to_status not in cls.VALID_STATUSES:
+            raise ValueError(f"Invalid status: {to_status}. Must be one of {cls.VALID_STATUSES}")
+
+        if from_status not in cls.VALID_STATUSES:
+            raise ValueError(f"Invalid current status: {from_status}. Must be one of {cls.VALID_STATUSES}")
+
+        # Check if transition is allowed
+        allowed_transitions = cls.VALID_TRANSITIONS.get(from_status, [])
+        if to_status not in allowed_transitions:
+            logger.warning(
+                f"Unusual status transition: {from_status} -> {to_status}. "
+                f"Allowed transitions from {from_status}: {allowed_transitions}"
+            )
+            return False
+
+        return True
