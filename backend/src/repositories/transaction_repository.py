@@ -4,6 +4,7 @@ TransactionRepository - Data access layer for Transaction entities.
 This module provides CRUD operations and queries for Transaction records.
 """
 
+import logging
 from typing import Optional
 from uuid import UUID
 
@@ -12,6 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from ..models.transaction import Transaction
+
+logger = logging.getLogger(__name__)
 
 
 class TransactionRepository:
@@ -100,11 +103,25 @@ class TransactionRepository:
             for simple bulk inserts. Future: Consider session.execute(insert(...))
             for modern SQLAlchemy 2.0 patterns.
         """
+        # Debug logging (Task 1.2, 1.3)
+        logger.info(f"[BULK_INSERT] Attempting to insert {len(transactions)} transactions")
+
+        if not transactions:
+            logger.warning("[BULK_INSERT] No transactions to insert - empty list provided")
+            return []
+
+        logger.info(f"[BULK_INSERT] First transaction data: {transactions[0]}")
+
         # Use bulk_insert_mappings for performance (single commit for all inserts)
-        await self.db.run_sync(
-            lambda session: session.bulk_insert_mappings(Transaction, transactions)
-        )
-        await self.db.flush()
+        try:
+            await self.db.run_sync(
+                lambda session: session.bulk_insert_mappings(Transaction, transactions)
+            )
+            await self.db.flush()
+            logger.info(f"[BULK_INSERT] Successfully flushed {len(transactions)} transactions to database")
+        except Exception as e:
+            logger.error(f"[BULK_INSERT] Failed to insert transactions: {type(e).__name__}: {str(e)}")
+            raise
 
         # Note: With bulk_insert_mappings, we don't get the objects back with IDs
         # For use cases that need the created objects, would need to query them back

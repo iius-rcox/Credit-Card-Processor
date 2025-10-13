@@ -113,7 +113,9 @@ async def test_create_alias_raises_400_on_duplicate(alias_service, mock_employee
 
     # Mock IntegrityError for duplicate
     mock_alias_repo.create_alias.side_effect = IntegrityError(
-        "unique constraint", None, None, orig=Exception("duplicate key value violates unique constraint")
+        statement="INSERT INTO employee_aliases...",
+        params={},
+        orig=Exception("duplicate key value violates unique constraint")
     )
 
     # Call service and expect HTTPException

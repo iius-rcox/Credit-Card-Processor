@@ -74,10 +74,10 @@ class Transaction(Base):
         nullable=False
     )
 
-    employee_id: Mapped[UUID] = mapped_column(
+    employee_id: Mapped[Optional[UUID]] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("employees.id", ondelete="CASCADE"),
-        nullable=False
+        nullable=True
     )
 
     # Transaction dates
