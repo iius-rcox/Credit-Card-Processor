@@ -65,24 +65,45 @@ class ExtractionService:
         self.progress_calculator = ProgressCalculator()
 
         # Compile regex patterns for performance (T017)
-        # Patterns match tab-separated transaction format:
-        # EMPLOYEE_NAME\tExpense_Type\tDate\tAmount\tMerchant_Name\tMerchant_Address\tStatus
-        self.employee_pattern = re.compile(r'^([A-Z][A-Z\s]+?)(?=\t)', re.MULTILINE)
+        # Updated for WEX Fleet card format (space-separated columns)
+        # Format: Trans Date  Posted Date  Lvl  Transaction #  Merchant Name  City, State  Group  Description  ...  Net Cost
+
+        # Pattern to extract employee name from section header
+        self.employee_header_pattern = re.compile(r'Cardholder Name:\s*([A-Z]+)', re.MULTILINE)
+        self.employee_id_pattern = re.compile(r'Employee ID:\s*(\d+)', re.MULTILINE)
+
         self.date_pattern = re.compile(r'(\d{1,2}/\d{1,2}/\d{4})')
         self.amount_pattern = re.compile(r'([-]?\$?[\d,]+(?:\.\d{2})?)')
-        self.expense_type_pattern = re.compile(
-            r'(Fuel|Meals|General Expense|Hotel|Legal|Maintenance|Misc\. Transportation|Business Services)'
-        )
 
-        # Master transaction pattern (tab-separated fields)
+        # Merchant group to expense type mapping
+        self.expense_type_map = {
+            'FUEL': 'Fuel',
+            'MISC': 'General Expense',
+            'MEALS': 'Meals',
+            'LODGING': 'Hotel',
+            'LEGAL': 'Legal',
+            'MAINT': 'Maintenance',
+            'TRANS': 'Misc. Transportation',
+            'SERVICE': 'Business Services'
+        }
+
+        # WEX transaction pattern (space-separated columns)
+        # Format: 03/03/2025 03/04/2025 N 000425061 OVERHEAD DOOR COMKPEMAH, TX MISC ... $768.22
+        # Key insight: Merchant name ends at comma (before state abbreviation)
         self.transaction_pattern = re.compile(
-            r'^([A-Z][A-Z\s]+?)\t'  # Employee name (all caps, before tab)
-            r'([\w\s\.]+?)\t'  # Expense type
-            r'(\d{1,2}/\d{1,2}/\d{4})\t'  # Date (MM/DD/YYYY)
-            r'([-]?\$?[\d,]+(?:\.\d{2})?)\t'  # Amount (with optional $, commas, negative)
-            r'(.+?)\t'  # Merchant name
-            r'(.+?)\t'  # Merchant address
-            r'(.+?)$',  # Status
+            r'^(\d{2}/\d{2}/\d{4})\s+'  # Trans Date
+            r'(\d{2}/\d{2}/\d{4})\s+'  # Posted Date
+            r'([A-Z])\s+'  # Level (F/N/L)
+            r'(\d+)\s+'  # Transaction #
+            r'(.+?),\s*'  # Merchant Name (everything until comma)
+            r'([A-Z]{2})\s+'  # State (2 letters after comma)
+            r'([A-Z]+)\s+'  # Merchant Group (FUEL, MISC, etc.)
+            r'(.+?)\s+'  # Product Description
+            r'[\d,]+\.?\d*\s+'  # PPU/G
+            r'[-]?[\d,]+\.?\d*\s+'  # Quantity
+            r'\$[-]?[\d,]+\.\d{2}\s+'  # Gross Cost
+            r'\$[-]?[\d,]+\.\d{2}\s+'  # Discount
+            r'(\$[-]?[\d,]+\.\d{2})$',  # Net Cost (final amount)
             re.MULTILINE
         )
 
@@ -171,6 +192,7 @@ class ExtractionService:
     async def _extract_credit_transactions(self, text: str) -> List[Dict]:
         """
         Extract credit card transactions from PDF text using regex (T018).
+        Updated for WEX Fleet card format.
 
         Args:
             text: Extracted text from PDF
@@ -183,26 +205,42 @@ class ExtractionService:
         """
         transactions = []
 
+        # Extract employee name from section header
+        employee_name = None
+        employee_header_match = self.employee_header_pattern.search(text)
+        if employee_header_match:
+            employee_name = employee_header_match.group(1).strip()
+
+        # Resolve employee_id once for all transactions in this section
+        employee_id = None
+        if self.alias_repo and employee_name:
+            employee_id = await self.alias_repo.resolve_employee_id(employee_name)
+
         # Apply master transaction pattern to extract all matches
         for match in self.transaction_pattern.finditer(text):
             try:
-                # Extract fields from regex groups
-                employee_name = match.group(1).strip() if match.group(1) else None
-                expense_type = match.group(2).strip() if match.group(2) else None
-                date_str = match.group(3).strip() if match.group(3) else None
-                amount_str = match.group(4).strip() if match.group(4) else None
-                merchant_name = match.group(5).strip() if match.group(5) else None
-                merchant_address = match.group(6).strip() if match.group(6) else None
-                status = match.group(7).strip() if match.group(7) else None
+                # Extract fields from regex groups (WEX format)
+                trans_date_str = match.group(1).strip() if match.group(1) else None  # Trans Date
+                posted_date_str = match.group(2).strip() if match.group(2) else None  # Posted Date
+                level = match.group(3).strip() if match.group(3) else None  # Level (F/N/L)
+                transaction_num = match.group(4).strip() if match.group(4) else None  # Transaction #
+                merchant_name = match.group(5).strip() if match.group(5) else None  # Merchant Name (until comma)
+                state = match.group(6).strip() if match.group(6) else None  # State (2 letters after comma)
+                merchant_group = match.group(7).strip() if match.group(7) else None  # Group (FUEL, MISC, etc.)
+                product_desc = match.group(8).strip() if match.group(8) else None  # Product Description
+                net_cost_str = match.group(9).strip() if match.group(9) else None  # Net Cost (final amount)
 
                 # Parse date and amount
-                transaction_date = self._parse_date(date_str) if date_str else None
-                amount = self._parse_amount(amount_str) if amount_str else None
+                transaction_date = self._parse_date(trans_date_str) if trans_date_str else None
+                amount = self._parse_amount(net_cost_str) if net_cost_str else None
 
-                # Resolve employee_id via alias repository
-                employee_id = None
-                if self.alias_repo and employee_name:
-                    employee_id = await self.alias_repo.resolve_employee_id(employee_name)
+                # Map merchant group to expense type
+                expense_type = None
+                if merchant_group:
+                    expense_type = self.expense_type_map.get(merchant_group, "General Expense")
+
+                # Build merchant address with state
+                merchant_address = state if state else None
 
                 # Determine flags
                 incomplete_flag = any([
@@ -215,21 +253,25 @@ class ExtractionService:
                 is_credit = amount is not None and amount < 0
 
                 # Build transaction dict
+                # Note: Using merchant_category (not expense_type) to match actual table schema
                 transaction = {
                     "employee_id": employee_id,
                     "transaction_date": transaction_date,
                     "amount": amount,
                     "merchant_name": merchant_name,
-                    "merchant_address": merchant_address,
-                    "expense_type": expense_type,
+                    "merchant_category": expense_type,  # Maps to merchant_category column
+                    "description": product_desc,  # Store product description
                     "incomplete_flag": incomplete_flag,
                     "is_credit": is_credit,
                     "raw_data": {
                         "raw_text": match.group(0),
                         "extracted_fields": {
                             "employee_name": employee_name,
-                            "expense_type": expense_type,
-                            "status": status
+                            "transaction_number": transaction_num,
+                            "merchant_group": merchant_group,
+                            "merchant_address": merchant_address,
+                            "state": state,
+                            "level": level
                         }
                     }
                 }
@@ -240,7 +282,7 @@ class ExtractionService:
                 # Handle extraction errors - create incomplete transaction with error
                 logger.warning(f"Failed to parse transaction: {e}")
                 transactions.append({
-                    "employee_id": None,
+                    "employee_id": employee_id,  # Use employee from header even on error
                     "transaction_date": None,
                     "amount": None,
                     "merchant_name": "EXTRACTION_ERROR",
@@ -251,6 +293,14 @@ class ExtractionService:
                         "raw_text": match.group(0) if match else ""
                     }
                 })
+
+        # Debug logging (Task 1.1)
+        logger.info(f"[EXTRACTION] Extracted {len(transactions)} transactions from PDF")
+        if transactions:
+            logger.info(f"[EXTRACTION] First transaction: date={transactions[0].get('transaction_date')}, "
+                       f"amount={transactions[0].get('amount')}, merchant={transactions[0].get('merchant_name')}")
+        else:
+            logger.warning("[EXTRACTION] No transactions extracted - regex pattern may not match PDF format")
 
         return transactions
 
@@ -534,16 +584,19 @@ class ExtractionService:
                     session_id, employee_data
                 )
 
-                # Extract transactions (assume first employee for now)
-                if employees:
-                    transaction_data = await self.extract_transactions(
-                        statement_pdf, session_id
-                    )
-                    # Add employee_id to each transaction
-                    for trans in transaction_data:
-                        trans["employee_id"] = employees[0].id
+                # Extract transactions
+                # Note: employee_id is now resolved from PDF header and aliases in extract_transactions()
+                # Don't need employees to be created first
+                transaction_data = await self.extract_transactions(
+                    statement_pdf, session_id
+                )
+                # session_id is already added in extract_transactions(), but ensure it's set
+                for trans in transaction_data:
+                    if "session_id" not in trans:
                         trans["session_id"] = session_id
+                    # Don't overwrite employee_id - it's resolved from aliases in extraction
 
+                if transaction_data:
                     await self.transaction_repo.bulk_create_transactions(transaction_data)
 
                 # Extract receipts
@@ -687,19 +740,45 @@ class ExtractionService:
             file_index: Current file index (1-based)
             total_files: Total number of files being processed
         """
-        # TODO: When real PDF processing is implemented with pdfplumber:
-        # 1. Open PDF and get total pages: len(pdf.pages)
-        # 2. Iterate through pages
-        # 3. Update progress for each page
-        # 4. Extract data from pages
+        # Real PDF processing with pdfplumber (007-actual-pdf-parsing)
+        # Extract transactions from PDF
+        logger.info(f"[PROCESS_PDF] Processing {pdf_file.name} for session {session_id}")
 
-        # Placeholder implementation showing progress tracking pattern
-        total_pages = 10  # Placeholder - would be from PDF metadata
+        # Get total pages for progress tracking
+        with pdfplumber.open(pdf_file) as pdf:
+            total_pages = len(pdf.pages)
 
-        for page_num in range(1, total_pages + 1):
-            # Simulate page processing
-            # In real implementation, this is where you'd extract text from the page
+        logger.info(f"[PROCESS_PDF] PDF has {total_pages} pages")
 
+        # Update progress - starting file processing
+        if self.progress_tracker:
+            await self.progress_tracker.update_progress(
+                current_phase="processing",
+                phase_details={
+                    "status": "in_progress",
+                    "total_files": total_files,
+                    "current_file_index": file_index,
+                    "current_file": {
+                        "name": pdf_file.name,
+                        "total_pages": total_pages,
+                        "current_page": 1,
+                        "started_at": datetime.utcnow()
+                    }
+                },
+                force_update=True
+            )
+
+        # Extract transactions from the PDF
+        transaction_data = await self.extract_transactions(pdf_file, session_id)
+        logger.info(f"[PROCESS_PDF] Extracted {len(transaction_data)} transactions from {pdf_file.name}")
+
+        # Bulk insert transactions
+        if transaction_data:
+            await self.transaction_repo.bulk_create_transactions(transaction_data)
+            logger.info(f"[PROCESS_PDF] Saved {len(transaction_data)} transactions to database")
+
+        # Simulate page-by-page progress updates (since we already extracted all)
+        for page_num in range(1, min(total_pages + 1, 11)):  # Update progress for first 10 pages only
             if self.progress_tracker:
                 # Calculate progress percentages
                 file_progress = self.progress_calculator.calculate_file_progress(

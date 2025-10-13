@@ -70,7 +70,9 @@
       "Bash(dir:*)",
       "Bash(.specify/scripts/bash/setup-plan.sh:*)",
       "Bash(mkdir:*)",
-      "Bash(.specify/scripts/bash/update-agent-context.sh:*)"
+      "Bash(.specify/scripts/bash/update-agent-context.sh:*)",
+      "Bash(docker inspect:*)",
+      "Bash(./deploy-all.sh:*)"
     ],
     "deny": [],
     "ask": []
