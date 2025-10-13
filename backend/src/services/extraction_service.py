@@ -253,13 +253,14 @@ class ExtractionService:
                 is_credit = amount is not None and amount < 0
 
                 # Build transaction dict
+                # Note: Using merchant_category (not expense_type) to match actual table schema
                 transaction = {
                     "employee_id": employee_id,
                     "transaction_date": transaction_date,
                     "amount": amount,
                     "merchant_name": merchant_name,
-                    "merchant_address": merchant_address,
-                    "expense_type": expense_type,
+                    "merchant_category": expense_type,  # Maps to merchant_category column
+                    "description": product_desc,  # Store product description
                     "incomplete_flag": incomplete_flag,
                     "is_credit": is_credit,
                     "raw_data": {
@@ -268,7 +269,8 @@ class ExtractionService:
                             "employee_name": employee_name,
                             "transaction_number": transaction_num,
                             "merchant_group": merchant_group,
-                            "product_description": product_desc,
+                            "merchant_address": merchant_address,
+                            "state": state,
                             "level": level
                         }
                     }
@@ -738,19 +740,45 @@ class ExtractionService:
             file_index: Current file index (1-based)
             total_files: Total number of files being processed
         """
-        # TODO: When real PDF processing is implemented with pdfplumber:
-        # 1. Open PDF and get total pages: len(pdf.pages)
-        # 2. Iterate through pages
-        # 3. Update progress for each page
-        # 4. Extract data from pages
+        # Real PDF processing with pdfplumber (007-actual-pdf-parsing)
+        # Extract transactions from PDF
+        logger.info(f"[PROCESS_PDF] Processing {pdf_file.name} for session {session_id}")
 
-        # Placeholder implementation showing progress tracking pattern
-        total_pages = 10  # Placeholder - would be from PDF metadata
+        # Get total pages for progress tracking
+        with pdfplumber.open(pdf_file) as pdf:
+            total_pages = len(pdf.pages)
 
-        for page_num in range(1, total_pages + 1):
-            # Simulate page processing
-            # In real implementation, this is where you'd extract text from the page
+        logger.info(f"[PROCESS_PDF] PDF has {total_pages} pages")
 
+        # Update progress - starting file processing
+        if self.progress_tracker:
+            await self.progress_tracker.update_progress(
+                current_phase="processing",
+                phase_details={
+                    "status": "in_progress",
+                    "total_files": total_files,
+                    "current_file_index": file_index,
+                    "current_file": {
+                        "name": pdf_file.name,
+                        "total_pages": total_pages,
+                        "current_page": 1,
+                        "started_at": datetime.utcnow()
+                    }
+                },
+                force_update=True
+            )
+
+        # Extract transactions from the PDF
+        transaction_data = await self.extract_transactions(pdf_file, session_id)
+        logger.info(f"[PROCESS_PDF] Extracted {len(transaction_data)} transactions from {pdf_file.name}")
+
+        # Bulk insert transactions
+        if transaction_data:
+            await self.transaction_repo.bulk_create_transactions(transaction_data)
+            logger.info(f"[PROCESS_PDF] Saved {len(transaction_data)} transactions to database")
+
+        # Simulate page-by-page progress updates (since we already extracted all)
+        for page_num in range(1, min(total_pages + 1, 11)):  # Update progress for first 10 pages only
             if self.progress_tracker:
                 # Calculate progress percentages
                 file_progress = self.progress_calculator.calculate_file_progress(
