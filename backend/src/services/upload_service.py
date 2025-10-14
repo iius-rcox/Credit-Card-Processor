@@ -390,45 +390,31 @@ async def process_session_background(
     session_id: UUID
 ) -> None:
     """
-    Background task to process uploaded files through extraction and matching.
+    DEPRECATED: This function is deprecated after the PDF extraction refactor.
 
-    This function orchestrates the entire processing workflow:
-    1. Create new database session (not tied to request context)
-    2. Get temp directory path
-    3. Run extraction with progress tracking
-    4. Run matching
-    5. Clean up temp files
-    6. Mark session as completed
+    Previously handled full extraction + matching workflow using temp storage.
+    Now replaced by:
+    - Inline extraction during upload (in process_upload)
+    - match_session_task for matching only
+
+    This function is kept to prevent import errors but should not be called.
+    If called by old Celery tasks, it will fail gracefully and mark session as failed.
 
     Args:
         session_id: UUID of the session to process
-
-    Note:
-        This function is designed to be run as a FastAPI BackgroundTask.
-        Errors are caught and logged, with session status updated to 'failed'.
-        Creates its own DB session since it runs outside the request context.
-
-        IMPORTANT: When running in Celery with asyncio.run(), we create a new engine
-        for this event loop to avoid "Future attached to different loop" errors.
     """
+    logger.error(
+        f"DEPRECATED FUNCTION CALLED: process_session_background for session {session_id}. "
+        "This function is deprecated after the PDF extraction refactor (008). "
+        "Use inline extraction + match_session_task instead."
+    )
+
+    # Fail the session gracefully
     from urllib.parse import quote_plus
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
     from ..config import settings
     from ..repositories.session_repository import SessionRepository
-    from ..repositories.employee_repository import EmployeeRepository
-    from ..repositories.transaction_repository import TransactionRepository
-    from ..repositories.receipt_repository import ReceiptRepository
-    from ..repositories.match_result_repository import MatchResultRepository
-    from ..repositories.progress_repository import ProgressRepository
-    from ..repositories.alias_repository import AliasRepository
-    from .extraction_service import ExtractionService
-    from .matching_service import MatchingService
 
-    # Note: Temp storage no longer used - extraction happens during upload
-    # This function is deprecated and should be replaced with match_session_task
-
-    # Create a new engine for this event loop (Celery worker context)
-    # This prevents "Future attached to different loop" errors
     database_url = (
         f"postgresql+asyncpg://{settings.POSTGRES_USER}:{quote_plus(settings.POSTGRES_PASSWORD)}"
         f"@{settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}"
@@ -437,7 +423,7 @@ async def process_session_background(
     worker_engine = create_async_engine(
         database_url,
         echo=False,
-        pool_size=2,  # Smaller pool for worker tasks
+        pool_size=2,
         max_overflow=3,
         pool_pre_ping=True,
         connect_args={"server_settings": {"jit": "off"}}
@@ -452,106 +438,10 @@ async def process_session_background(
     )
 
     try:
-        # Create new database session for background task using worker engine
         async with WorkerSessionLocal() as db:
-            try:
-                logger.info(f"Starting background processing for session {session_id}")
-
-                # Create repositories and services with the background task DB session
-                session_repo = SessionRepository(db)
-                employee_repo = EmployeeRepository(db)
-                transaction_repo = TransactionRepository(db)
-                receipt_repo = ReceiptRepository(db)
-                match_result_repo = MatchResultRepository(db)
-                progress_repo = ProgressRepository(db)
-                alias_repo = AliasRepository(db)
-
-                extraction_service = ExtractionService(
-                    session_repo, employee_repo, transaction_repo, receipt_repo, progress_repo, alias_repo
-                )
-                matching_service = MatchingService(
-                    session_repo, transaction_repo, receipt_repo, match_result_repo
-                )
-
-                # Initialize progress tracker in extraction service
-                await extraction_service.initialize_progress_tracker(session_id)
-
-                # Phase 1: Extraction with progress tracking
-                logger.info(f"Starting extraction phase for session {session_id}")
-                await extraction_service.process_session_files_with_progress(
-                    session_id, temp_dir
-                )
-
-                # Phase 2: Matching (if matching service provided)
-                if matching_service:
-                    logger.info(f"Starting matching phase for session {session_id}")
-                    # TODO: Implement matching with progress tracking
-                    # For now, matching service doesn't have progress tracking integrated
-                    # This will be added in future iterations
-                    pass
-
-                # Mark session as completed
-                await extraction_service.session_repo.update_session_status(
-                    session_id, "completed"
-                )
-
-                # Update final progress state
-                if extraction_service.progress_tracker:
-                    await extraction_service.progress_tracker.update_progress(
-                        current_phase="completed",
-                        phase_details={
-                            "status": "completed",
-                            "percentage": 100
-                        },
-                        force_update=True
-                    )
-                    await extraction_service.progress_tracker.flush_pending()
-
-                logger.info(f"Processing completed successfully for session {session_id}")
-
-                # Commit the database session
-                await db.commit()
-
-            except Exception as e:
-                logger.error(
-                    f"Background processing failed for session {session_id}: {type(e).__name__}: {str(e)}",
-                    exc_info=True
-                )
-
-                # Rollback on error
-                await db.rollback()
-
-                # Mark session as failed
-                try:
-                    session_repo = SessionRepository(db)
-                    await session_repo.update_session_status(
-                        session_id, "failed"
-                    )
-                    await db.commit()
-                except Exception as cleanup_error:
-                    logger.error(
-                        f"Failed to update session status after error: {cleanup_error}",
-                        exc_info=True
-                    )
-
+            session_repo = SessionRepository(db)
+            await session_repo.update_session_status(session_id, "failed")
+            await db.commit()
+            logger.info(f"Marked session {session_id} as failed (deprecated function called)")
     finally:
-        # Dispose of the worker engine to close all connections
-        try:
-            await worker_engine.dispose()
-            logger.info(f"Disposed worker engine for session {session_id}")
-        except Exception as engine_error:
-            logger.error(f"Failed to dispose worker engine: {engine_error}", exc_info=True)
-
-        # Always clean up temp files
-        try:
-            if temp_dir.exists():
-                for file_path in temp_dir.iterdir():
-                    if file_path.is_file():
-                        file_path.unlink()
-                temp_dir.rmdir()
-                logger.info(f"Cleaned up temp files for session {session_id}")
-        except Exception as cleanup_error:
-            logger.error(
-                f"Failed to cleanup temp files for session {session_id}: {cleanup_error}",
-                exc_info=True
-            )
+        await worker_engine.dispose()

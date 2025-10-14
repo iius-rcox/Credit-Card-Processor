@@ -10,7 +10,6 @@ from pathlib import Path
 from uuid import UUID
 
 from .celery_app import celery_app
-from .services.upload_service import process_session_background
 
 logger = logging.getLogger(__name__)
 
@@ -19,55 +18,41 @@ logger.info("=" * 80)
 logger.info("CELERY TASKS MODULE LOADED")
 logger.info(f"  Module: {__name__}")
 logger.info(f"  Celery app: {celery_app}")
-logger.info(f"  Task names: tasks.process_session, tasks.match_session")
+logger.info(f"  Active task: tasks.match_session")
+logger.info(f"  Deprecated task: tasks.process_session (kept for compatibility)")
 logger.info("=" * 80)
 
 
 @celery_app.task(name="tasks.process_session")
 def process_session_task(session_id_str: str) -> dict:
     """
-    Celery task to process uploaded files for a session.
+    DEPRECATED: This task is deprecated after the PDF extraction refactor (008).
 
-    This task runs asynchronously in a Celery worker process.
+    Previously handled full extraction + matching workflow.
+    Now replaced by:
+    - Inline extraction during upload
+    - match_session_task for matching only
+
+    This task is kept to prevent import errors but will fail gracefully if called.
 
     Args:
         session_id_str: String representation of session UUID
 
     Returns:
-        dict with status and session_id
+        dict with status, session_id, and error message
     """
-    import asyncio
-    from uuid import UUID
+    logger.warning("=" * 80)
+    logger.warning(f"✗ DEPRECATED TASK CALLED: process_session_task")
+    logger.warning(f"  Session ID (str): {session_id_str}")
+    logger.warning(f"  This task is deprecated after refactor 008")
+    logger.warning(f"  Use inline extraction + match_session_task instead")
+    logger.warning("=" * 80)
 
-    logger.info("=" * 80)
-    logger.info(f"✓ CELERY TASK STARTED: process_session_task")
-    logger.info(f"  Task ID: {process_session_task.request.id}")
-    logger.info(f"  Session ID (str): {session_id_str}")
-    logger.info("=" * 80)
-
-    session_id = UUID(session_id_str)
-    logger.info(f"  Session ID (UUID): {session_id}")
-
-    try:
-        logger.info(f"→ Running async background processing for session {session_id}...")
-        # Run the async function in a new event loop
-        # Each Celery worker task runs in its own process with its own event loop
-        asyncio.run(process_session_background(session_id))
-
-        logger.info(f"✓ Task completed successfully for session {session_id}")
-        return {
-            "status": "success",
-            "session_id": session_id_str
-        }
-    except Exception as e:
-        logger.error(f"✗ Task failed for session {session_id}: {e}", exc_info=True)
-        logger.error(f"  Error type: {type(e).__name__}")
-        logger.error(f"  Error message: {str(e)}")
-        return {
-            "status": "error",
-            "session_id": session_id_str,
-            "error": str(e)
-        }
+    return {
+        "status": "error",
+        "session_id": session_id_str,
+        "error": "DEPRECATED: process_session_task is no longer supported. Use inline extraction + match_session_task."
+    }
 
 
 @celery_app.task(name="tasks.match_session")
