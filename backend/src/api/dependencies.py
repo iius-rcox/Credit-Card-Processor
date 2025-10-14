@@ -59,14 +59,6 @@ def get_alias_repository(db: AsyncSession = Depends(get_db)) -> AliasRepository:
 
 
 # Service dependencies
-def get_upload_service(
-    session_repo: SessionRepository = Depends(get_session_repository),
-    progress_repo: ProgressRepository = Depends(get_progress_repository)
-) -> UploadService:
-    """Get UploadService instance."""
-    return UploadService(session_repo, progress_repo)
-
-
 def get_extraction_service(
     session_repo: SessionRepository = Depends(get_session_repository),
     employee_repo: EmployeeRepository = Depends(get_employee_repository),
@@ -78,6 +70,23 @@ def get_extraction_service(
     """Get ExtractionService instance."""
     return ExtractionService(
         session_repo, employee_repo, transaction_repo, receipt_repo, progress_repo, alias_repo
+    )
+
+
+def get_upload_service(
+    session_repo: SessionRepository = Depends(get_session_repository),
+    transaction_repo: TransactionRepository = Depends(get_transaction_repository),
+    receipt_repo: ReceiptRepository = Depends(get_receipt_repository),
+    extraction_service: ExtractionService = Depends(get_extraction_service),
+    progress_repo: ProgressRepository = Depends(get_progress_repository)
+) -> UploadService:
+    """Get UploadService instance with extraction service for inline extraction."""
+    return UploadService(
+        session_repo,
+        transaction_repo,
+        receipt_repo,
+        extraction_service,
+        progress_repo
     )
 
 

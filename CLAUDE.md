@@ -39,6 +39,7 @@ cd src [ONLY COMMANDS FOR ACTIVE TECHNOLOGIES][ONLY COMMANDS FOR ACTIVE TECHNOLO
 Python 3.11+ (backend), TypeScript/Next.js 15 (frontend): Follow standard conventions
 
 ## Recent Changes
+- 008-refactor-pdf-extraction: Refactored PDF extraction to run inline during upload (no temp storage), matching-only Celery tasks
 - 007-actual-pdf-parsing: Real PDF extraction with regex patterns, employee alias mapping, pdfplumber integration, incomplete/credit transaction flags
 - 006-better-status-updates: Added Python 3.11+ (backend), TypeScript/Next.js 15 (frontend) + FastAPI, SQLAlchemy, Next.js 15, React 19, SSE/WebSocket
 
@@ -63,6 +64,81 @@ Python 3.11+ (backend), TypeScript/Next.js 15 (frontend): Follow standard conven
 - Graceful handling of incomplete extractions
 - Credit/refund detection (negative amounts)
 - Bulk insert optimization for 10k+ transactions
+
+## PDF Extraction Architecture (008-refactor-pdf-extraction)
+
+### Overview
+PDF extraction now happens **inline during upload** in the backend, eliminating the need for temporary storage and providing immediate feedback to users.
+
+### Key Changes
+
+#### Extraction Flow
+- **Before**: Upload → Save to temp storage → Queue Celery task → Extract → Match → Cleanup
+- **After**: Upload → Extract inline → Save to DB → Queue matching task → Match → Complete
+
+#### No Temporary Storage
+- PDFs are processed in-memory using `io.BytesIO`
+- No files written to disk during upload
+- `TEMP_STORAGE_PATH` configuration removed
+- Shared storage volumes removed from deployments
+
+#### Session Status Flow
+- **Before**: `processing` → `completed`/`failed`
+- **After**: `extracting` → `matching` → `completed`/`failed`
+
+#### Celery Tasks
+- **Old**: `process_session_task` - Full extraction + matching
+- **New**: `match_session_task` - Matching only (extraction already complete)
+
+### Implementation Details
+
+#### UploadService (backend/src/services/upload_service.py)
+- `process_upload()` now calls `ExtractionService.extract_from_upload_file()` directly
+- Progress tracking shows extraction happening in real-time
+- Transactions bulk-inserted immediately after extraction
+- Matching task queued with session ID only
+
+#### ExtractionService (backend/src/services/extraction_service.py)
+- `extract_from_upload_file(file: UploadFile, session_id: UUID)` - New method
+- Processes PDFs in-memory using BytesIO
+- Ensures proper memory cleanup with `finally` blocks
+- Returns tuple of (transactions, receipts)
+
+#### Celery Tasks (backend/src/tasks.py)
+- `match_session_task(session_id: str)` - New lightweight task
+- Loads transactions from database (already extracted)
+- Runs matching algorithm only
+- No file I/O operations
+
+### Deployment Changes
+
+#### Docker Compose (deploy/docker-compose.yml)
+- Removed `shared-temp` volume
+- Removed `TEMP_STORAGE_PATH` environment variable
+
+#### Kubernetes (deploy/k8s/)
+- Removed volume mounts from `backend-deployment.yaml`
+- Removed volume mounts from `celery-worker-deployment.yaml`
+- Removed `TEMP_STORAGE_PATH` environment variable
+
+### Benefits
+- ✅ No shared storage infrastructure required
+- ✅ Immediate extraction error feedback to users
+- ✅ Simpler architecture (fewer moving parts)
+- ✅ Better memory management (sequential processing)
+- ✅ Reduced infrastructure costs
+- ✅ Faster user feedback (no async delay)
+
+### Memory Considerations
+- Backend processes PDFs one at a time during upload
+- Each PDF is garbage collected after extraction
+- Celery worker memory reduced (no PDF processing)
+- Backend memory may need increase for concurrent uploads
+
+### Migration Notes
+- Azure Files cleanup commands: `docs/AZURE_CLEANUP_COMMANDS.md`
+- Old `process_session_background()` function deprecated
+- Testing phases: Small PDFs → Large PDFs → Load testing
 
 <!-- MANUAL ADDITIONS START -->
 # CRITICAL: ARCHON-FIRST RULE - READ THIS FIRST
