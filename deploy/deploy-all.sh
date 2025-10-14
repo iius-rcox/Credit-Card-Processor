@@ -29,6 +29,7 @@ NC='\033[0m' # No Color
 
 echo -e "${CYAN}========================================${NC}"
 echo -e "${CYAN}  Full AKS Deployment Script${NC}"
+echo -e "${CYAN}  (with Database Migrations)${NC}"
 echo -e "${CYAN}========================================${NC}"
 echo -e "${YELLOW}Frontend Tag: ${FRONTEND_TAG}${NC}"
 echo -e "${YELLOW}Backend Tag:  ${BACKEND_TAG}${NC}"
@@ -102,28 +103,36 @@ fi
 echo -e "${GREEN}[7/11] Deleting existing backend pods...${NC}"
 kubectl delete pods -l app=backend -n "$NAMESPACE" 2>/dev/null || echo -e "${YELLOW}Warning: Failed to delete backend pods (may not exist yet)${NC}"
 
-# Step 8: Update backend deployment
-echo -e "${GREEN}[8/11] Updating backend deployment...${NC}"
+# Step 8: Run database migrations
+echo -e "${GREEN}[8/11] Running database migrations...${NC}"
+"${DEPLOY_DIR}/run-migrations.sh" "$NAMESPACE" "$BACKEND_TAG" "$ACR_NAME"
+if [ $? -ne 0 ]; then
+    echo -e "${RED}Database migration failed${NC}"
+    exit 1
+fi
+
+# Step 9: Update backend deployment
+echo -e "${GREEN}[9/11] Updating backend deployment...${NC}"
 kubectl set image deployment/backend "backend=${ACR_NAME}.azurecr.io/expense-backend:${BACKEND_TAG}" -n "$NAMESPACE"
 if [ $? -ne 0 ]; then
     echo -e "${RED}Backend deployment update failed${NC}"
     exit 1
 fi
 
-# Step 9: Wait for backend rollout
-echo -e "${GREEN}[9/11] Waiting for backend rollout...${NC}"
+# Step 10: Wait for backend rollout
+echo -e "${GREEN}[10/11] Waiting for backend rollout...${NC}"
 kubectl rollout status deployment/backend -n "$NAMESPACE" --timeout=5m
 if [ $? -ne 0 ]; then
     echo -e "${RED}Backend rollout failed or timed out${NC}"
     exit 1
 fi
 
-# Step 10: Delete existing frontend pods
-echo -e "${GREEN}[10/11] Deleting existing frontend pods...${NC}"
+# Step 11: Delete existing frontend pods
+echo -e "${GREEN}[11/11] Deleting existing frontend pods...${NC}"
 kubectl delete pods -l app=frontend -n "$NAMESPACE" 2>/dev/null || echo -e "${YELLOW}Warning: Failed to delete frontend pods (may not exist yet)${NC}"
 
-# Step 11: Update frontend deployment
-echo -e "${GREEN}[11/11] Updating frontend deployment...${NC}"
+# Step 12: Update frontend deployment
+echo -e "${GREEN}[12/11] Updating frontend deployment...${NC}"
 kubectl set image deployment/frontend "frontend=${ACR_NAME}.azurecr.io/expense-frontend:${FRONTEND_TAG}" -n "$NAMESPACE"
 if [ $? -ne 0 ]; then
     echo -e "${RED}Frontend deployment update failed${NC}"

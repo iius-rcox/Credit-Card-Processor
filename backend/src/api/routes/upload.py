@@ -12,7 +12,6 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from ..dependencies import get_upload_service
 from ..schemas import SessionResponse
 from ...services.upload_service import UploadService
-from ...tasks import process_session_task
 
 logger = logging.getLogger(__name__)
 
@@ -34,10 +33,11 @@ router = APIRouter(tags=["upload"])
     - Maximum 300MB per file
 
     **Process:**
-    1. Files are validated and saved to temporary storage
-    2. A new session is created with status='processing'
-    3. Background extraction and matching is triggered
-    4. Session ID is returned for status polling
+    1. Files are validated (PDF format, size, count)
+    2. PDFs are extracted inline (no temporary storage)
+    3. Session status transitions: extracting → matching
+    4. Background matching task is queued automatically
+    5. Session ID is returned for status polling
 
     **Response:**
     - 202 Accepted: Files accepted, processing started
@@ -64,30 +64,15 @@ async def upload_files(
         HTTPException 500: If server error occurs
     """
     try:
-        # Process upload (validation + session creation)
+        # Process upload: validation + inline extraction + queue matching task
+        # Note: process_upload() now handles extraction inline and queues match_session_task
         session = await upload_service.process_upload(files)
-        logger.info(f"✓ Session created: {session.id}, status={session.status}")
-        logger.info(f"  Session object type: {type(session).__name__}")
-        logger.info(f"  Session attributes: id={session.id}, status={session.status}, upload_count={session.upload_count}")
+        logger.info(f"✓ Upload completed: session {session.id}, status={session.status}")
+        logger.info(f"  Uploaded: {session.upload_count} file(s)")
+        logger.info(f"  Extracted: {session.total_transactions} transaction(s)")
+        logger.info(f"  Matching task queued automatically by upload_service")
 
-        # Queue background processing task using Celery
-        # This dispatches to Redis queue and returns immediately
-        try:
-            logger.info(f"→ Attempting to dispatch Celery task for session {session.id}...")
-            task = process_session_task.delay(str(session.id))
-            logger.info(f"✓ Celery task dispatched successfully!")
-            logger.info(f"  Task ID: {task.id}")
-            logger.info(f"  Task state: {task.state}")
-            logger.info(f"  Session ID sent to task: {session.id}")
-        except Exception as task_error:
-            logger.error(f"✗ FAILED to dispatch Celery task!", exc_info=True)
-            logger.error(f"  Error type: {type(task_error).__name__}")
-            logger.error(f"  Error message: {str(task_error)}")
-            logger.error(f"  Session ID: {session.id}")
-            # Re-raise to be caught by outer exception handler
-            raise
-
-        # Convert to dict first to avoid greenlet issues with computed columns
+        # Create response
         logger.info(f"→ Creating SessionResponse for session {session.id}...")
         try:
             response = SessionResponse(

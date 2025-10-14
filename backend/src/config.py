@@ -97,10 +97,6 @@ class Settings(BaseSettings):
         default=100,
         description="Maximum number of files per upload"
     )
-    TEMP_STORAGE_PATH: str = Field(
-        default="/tmp/credit-card-uploads",
-        description="Path for temporary file storage"
-    )
 
     # Debug settings (development only)
     DEBUG_EXTRACTION_OUTPUT: bool = Field(

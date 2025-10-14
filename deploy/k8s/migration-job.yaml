@@ -1,0 +1,101 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: backend-migration
+  namespace: credit-card-processor
+  labels:
+    app: backend
+    component: migration
+spec:
+  # Only keep last 3 completed migration jobs
+  ttlSecondsAfterFinished: 86400  # 24 hours
+  backoffLimit: 3  # Retry up to 3 times on failure
+
+  template:
+    metadata:
+      labels:
+        app: backend
+        component: migration
+    spec:
+      restartPolicy: OnFailure
+
+      # Service account for workload identity
+      serviceAccountName: credit-card-processor-sa
+
+      # Image pull secret for ACR
+      imagePullSecrets:
+      - name: acr-secret
+
+      containers:
+      - name: migration
+        image: iiusacr.azurecr.io/expense-backend:v1.0.13
+        imagePullPolicy: Always
+
+        # Run alembic migrations
+        command:
+          - /bin/sh
+          - -c
+          - |
+            echo "Running database migrations..."
+            alembic upgrade head
+            echo "Migrations completed successfully"
+
+        # Environment variables (same as backend)
+        env:
+        - name: POSTGRES_HOST
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secrets
+              key: POSTGRES_HOST
+        - name: POSTGRES_PORT
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secrets
+              key: POSTGRES_PORT
+        - name: POSTGRES_DB
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secrets
+              key: POSTGRES_DB
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secrets
+              key: POSTGRES_USER
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secrets
+              key: POSTGRES_PASSWORD
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secrets
+              key: DATABASE_URL
+        - name: ENVIRONMENT
+          value: production
+        - name: LOG_LEVEL
+          value: INFO
+
+        # Resource limits (migration needs less resources)
+        resources:
+          requests:
+            cpu: 50m
+            memory: 256Mi
+          limits:
+            cpu: 100m
+            memory: 256Mi
+
+        # Security context
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+
+      # Security settings
+      securityContext:
+        fsGroup: 1000
+        runAsNonRoot: true

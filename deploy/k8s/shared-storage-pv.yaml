@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: credit-card-temp-pv
+spec:
+  capacity:
+    storage: 50Gi
+  accessModes:
+    - ReadWriteMany
+  azureFile:
+    secretName: azure-files-secret
+    shareName: credit-card-temp
+    readOnly: false
+  mountOptions:
+  - dir_mode=0777
+  - file_mode=0777

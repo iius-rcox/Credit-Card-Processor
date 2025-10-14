@@ -5,15 +5,17 @@ This module extracts employee data, transactions, and receipt information
 from uploaded PDF files.
 """
 
+import io
 import re
 import logging
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 from uuid import UUID
 
 import pdfplumber
+from fastapi import UploadFile
 
 from ..repositories.employee_repository import EmployeeRepository
 from ..repositories.progress_repository import ProgressRepository
@@ -396,6 +398,97 @@ class ExtractionService:
             )
 
         return transactions
+
+    async def extract_from_upload_file(
+        self,
+        file: UploadFile,
+        session_id: UUID
+    ) -> Tuple[List[Dict], List[Dict]]:
+        """
+        Extract transactions and receipts from an uploaded PDF file stream.
+
+        Args:
+            file: FastAPI UploadFile (PDF)
+            session_id: Session UUID
+
+        Returns:
+            Tuple of (transactions, receipts)
+
+        Note:
+            Processes PDF in-memory without saving to disk.
+            Memory is released after processing each file.
+
+        Example:
+            transactions, receipts = await service.extract_from_upload_file(file, session_id)
+        """
+        # Read file content
+        content = await file.read()
+
+        # Process PDF from bytes (in-memory)
+        pdf_stream = io.BytesIO(content)
+
+        try:
+            transactions, receipts = await self._extract_from_pdf_stream(
+                pdf_stream, file.filename or "unknown.pdf", session_id
+            )
+            return transactions, receipts
+        finally:
+            # Ensure memory is released
+            pdf_stream.close()
+            del content
+            del pdf_stream
+
+    async def _extract_from_pdf_stream(
+        self,
+        pdf_stream: io.BytesIO,
+        filename: str,
+        session_id: UUID
+    ) -> Tuple[List[Dict], List[Dict]]:
+        """
+        Extract data from a PDF stream (in-memory).
+
+        Args:
+            pdf_stream: BytesIO object containing PDF data
+            filename: Original filename for logging
+            session_id: Session UUID
+
+        Returns:
+            Tuple of (transactions, receipts)
+
+        Note:
+            Uses pdfplumber to extract text from the BytesIO stream.
+        """
+        transactions = []
+        receipts = []
+
+        # Extract text using pdfplumber from stream
+        text = ""
+        with pdfplumber.open(pdf_stream) as pdf:
+            for page in pdf.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text += page_text + "\n"
+
+        # Validate that we extracted some text
+        if not text or len(text.strip()) == 0:
+            raise Exception(f"Scanned image PDF not supported for {filename}. Please upload text-based PDF.")
+
+        # Debug logging
+        logger.info(f"[PDF_STREAM] Extracted {len(text)} characters from {filename}")
+
+        # Extract transactions using existing logic
+        transaction_dicts = await self._extract_credit_transactions(text)
+
+        # Add session_id to each transaction
+        for trans in transaction_dicts:
+            trans["session_id"] = session_id
+
+        transactions.extend(transaction_dicts)
+
+        # Receipts: For now, we don't extract receipts from card statements
+        # This could be extended in the future if needed
+
+        return transactions, receipts
 
     async def extract_employees(self, pdf_path: Path) -> List[Dict]:
         """

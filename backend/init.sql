@@ -45,10 +45,10 @@ CREATE INDEX idx_employees_session_created ON employees(session_id, created_at);
 CREATE TABLE transactions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     session_id UUID NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-    employee_id UUID NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+    employee_id UUID REFERENCES employees(id) ON DELETE CASCADE,  -- NULLABLE: allows transactions with unknown employees
     transaction_date DATE NOT NULL,
     post_date DATE,
-    amount DECIMAL(12,2) NOT NULL,
+    amount DECIMAL(12,2) NOT NULL,  -- Allows negative values for credits/refunds
     currency CHAR(3) NOT NULL DEFAULT 'USD',
     merchant_name VARCHAR(255) NOT NULL,
     merchant_category VARCHAR(100),
@@ -56,8 +56,10 @@ CREATE TABLE transactions (
     card_last_four CHAR(4),
     reference_number VARCHAR(100),
     raw_data JSONB,
+    incomplete_flag BOOLEAN NOT NULL DEFAULT FALSE,  -- Set when employee_id is NULL or data incomplete
+    is_credit BOOLEAN NOT NULL DEFAULT FALSE,  -- Set when amount is negative (refund/credit)
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT chk_transactions_amount CHECK (amount > 0),
+    -- Note: Removed CHECK constraint for amount > 0 to allow negative amounts
     CONSTRAINT chk_transactions_post_date CHECK (post_date IS NULL OR post_date >= transaction_date),
     CONSTRAINT uq_transactions_reference UNIQUE NULLS NOT DISTINCT (session_id, reference_number)
 );
