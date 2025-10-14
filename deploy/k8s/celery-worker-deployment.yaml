@@ -1,0 +1,140 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-worker
+  namespace: credit-card-processor
+  labels:
+    app: celery-worker
+    component: worker
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: celery-worker
+  template:
+    metadata:
+      labels:
+        app: celery-worker
+        component: worker
+        azure.workload.identity/use: "true"
+    spec:
+      # Service account for workload identity
+      serviceAccountName: credit-card-processor-sa
+
+      # Image pull secret for ACR
+      imagePullSecrets:
+      - name: acr-secret
+
+      containers:
+      - name: celery-worker
+        image: iiusacr.azurecr.io/expense-backend:v1.0.13
+        imagePullPolicy: Always
+        command: ["python"]
+        args:
+          - "-m"
+          - "celery"
+          - "-A"
+          - "src.celery_app"
+          - "worker"
+          - "--loglevel=info"
+          - "--concurrency=2"
+
+        # Environment variables (same as backend)
+        env:
+        # Database parameters
+        - name: POSTGRES_HOST
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secrets
+              key: POSTGRES_HOST
+        - name: POSTGRES_PORT
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secrets
+              key: POSTGRES_PORT
+        - name: POSTGRES_DB
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secrets
+              key: POSTGRES_DB
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secrets
+              key: POSTGRES_USER
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secrets
+              key: POSTGRES_PASSWORD
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secrets
+              key: DATABASE_URL
+        # Redis connection
+        - name: REDIS_HOST
+          value: redis-service.safety-amp.svc.cluster.local
+        - name: REDIS_PORT
+          value: "6379"
+        # Application configuration
+        - name: ENVIRONMENT
+          value: production
+        - name: LOG_LEVEL
+          value: INFO
+
+        # Resource limits
+        resources:
+          requests:
+            cpu: 100m
+            memory: 1Gi
+          limits:
+            cpu: 500m
+            memory: 2Gi
+
+        # Health checks using celery inspect
+        # Note: We use 'inspect ping' without -d flag to check all workers
+        # The timeout must be shorter than periodSeconds to avoid overlapping checks
+        livenessProbe:
+          exec:
+            command:
+              - /bin/sh
+              - -c
+              - "python -m celery -A src.celery_app inspect ping --timeout=8 | grep -q 'pong'"
+          initialDelaySeconds: 30
+          periodSeconds: 60
+          timeoutSeconds: 15
+          failureThreshold: 5
+
+        readinessProbe:
+          exec:
+            command:
+              - /bin/sh
+              - -c
+              - "python -m celery -A src.celery_app inspect ping --timeout=3 | grep -q 'pong'"
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        # Security context
+        securityContext:
+          allowPrivilegeEscalation: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+
+      # Graceful shutdown
+      terminationGracePeriodSeconds: 30
+
+      # Security settings
+      securityContext:
+        fsGroup: 1000
+        runAsNonRoot: true

@@ -69,3 +69,8 @@ dist/
 server/htmlcov/
 deploy/.next/
 deploy/build/
+
+# Debug output files (development only)
+debug_output/
+*.debug.json
+*.debug.txt

@@ -5,15 +5,17 @@ This module extracts employee data, transactions, and receipt information
 from uploaded PDF files.
 """
 
+import io
 import re
 import logging
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 from uuid import UUID
 
 import pdfplumber
+from fastapi import UploadFile
 
 from ..repositories.employee_repository import EmployeeRepository
 from ..repositories.progress_repository import ProgressRepository
@@ -63,6 +65,12 @@ class ExtractionService:
         self.alias_repo = alias_repo
         self.progress_tracker: Optional[ProgressTracker] = None
         self.progress_calculator = ProgressCalculator()
+
+        # Track current session for debug output
+        self._current_session_id: Optional[UUID] = None
+        self._current_pdf_filename: Optional[str] = None
+        self._current_pdf_size: Optional[int] = None
+        self._current_pdf_pages: Optional[int] = None
 
         # Compile regex patterns for performance (T017)
         # Updated for WEX Fleet card format (space-separated columns)
@@ -142,6 +150,18 @@ class ExtractionService:
         logger.info(f"[PDF_TEXT] First 5 lines:")
         for i, line in enumerate(text.split('\n')[:5], 1):
             logger.info(f"[PDF_TEXT]   Line {i}: {repr(line)[:100]}")
+
+        # Debug file output: Raw text extraction
+        if self._current_session_id:
+            from ..utils.debug_writer import write_debug_text
+
+            # Determine file type from content
+            file_name = "01_cardholder_text" if "Cardholder" in text[:500] else "02_receipt_text"
+            write_debug_text(
+                session_id=self._current_session_id,
+                file_name=file_name,
+                text=text
+            )
 
         return text
 
@@ -328,7 +348,147 @@ class ExtractionService:
         else:
             logger.warning("[EXTRACTION] No transactions extracted - regex pattern may not match PDF format")
 
+        # Debug file output: Regex processing results
+        if self._current_session_id:
+            from ..utils.debug_writer import write_debug_json
+
+            debug_data = {
+                "extraction_timestamp": datetime.utcnow().isoformat(),
+                "session_id": str(self._current_session_id),
+                "pdf_metadata": {
+                    "filename": self._current_pdf_filename or "unknown",
+                    "file_size_bytes": self._current_pdf_size or 0,
+                    "total_pages": self._current_pdf_pages or 0
+                },
+                "employee_name_found": employee_name,
+                "employee_id_resolved": str(employee_id) if employee_id else None,
+                "total_matches": len(transactions),
+                "incomplete_count": sum(1 for t in transactions if t.get("incomplete_flag")),
+                "credit_count": sum(1 for t in transactions if t.get("is_credit")),
+                "regex_patterns": {
+                    "employee_header": self.employee_header_pattern.pattern,
+                    "transaction": self.transaction_pattern.pattern
+                },
+                "sample_text": text[:1000],
+                "extracted_transactions": transactions[:10],  # First 10 only
+                "extraction_stats": {
+                    "text_length": len(text),
+                    "lines_processed": len(text.split('\n')),
+                    "pattern_matches": len(matches_list)
+                },
+                "match_statistics": {
+                    "total_lines_in_pdf": len(text.split('\n')),
+                    "lines_with_dates": len([l for l in text.split('\n') if self.date_pattern.search(l)]),
+                    "lines_with_amounts": len([l for l in text.split('\n') if self.amount_pattern.search(l)]),
+                    "successful_parses": len([t for t in transactions if not t.get("incomplete_flag")]),
+                    "failed_parses": len([t for t in transactions if t.get("incomplete_flag")]),
+                    "negative_amounts": len([t for t in transactions if t.get("is_credit")])
+                },
+                "sample_matches": {
+                    "first_matched_line": matches_list[0].group(0) if matches_list else None,
+                    "first_10_lines": text.split('\n')[5:15] if len(text.split('\n')) > 15 else text.split('\n')
+                }
+            }
+
+            file_name = "03_cardholder_regex_results" if "Cardholder" in text[:500] else "04_receipt_regex_results"
+            write_debug_json(
+                session_id=self._current_session_id,
+                file_name=file_name,
+                data=debug_data
+            )
+
         return transactions
+
+    async def extract_from_upload_file(
+        self,
+        file: UploadFile,
+        session_id: UUID
+    ) -> Tuple[List[Dict], List[Dict]]:
+        """
+        Extract transactions and receipts from an uploaded PDF file stream.
+
+        Args:
+            file: FastAPI UploadFile (PDF)
+            session_id: Session UUID
+
+        Returns:
+            Tuple of (transactions, receipts)
+
+        Note:
+            Processes PDF in-memory without saving to disk.
+            Memory is released after processing each file.
+
+        Example:
+            transactions, receipts = await service.extract_from_upload_file(file, session_id)
+        """
+        # Read file content
+        content = await file.read()
+
+        # Process PDF from bytes (in-memory)
+        pdf_stream = io.BytesIO(content)
+
+        try:
+            transactions, receipts = await self._extract_from_pdf_stream(
+                pdf_stream, file.filename or "unknown.pdf", session_id
+            )
+            return transactions, receipts
+        finally:
+            # Ensure memory is released
+            pdf_stream.close()
+            del content
+            del pdf_stream
+
+    async def _extract_from_pdf_stream(
+        self,
+        pdf_stream: io.BytesIO,
+        filename: str,
+        session_id: UUID
+    ) -> Tuple[List[Dict], List[Dict]]:
+        """
+        Extract data from a PDF stream (in-memory).
+
+        Args:
+            pdf_stream: BytesIO object containing PDF data
+            filename: Original filename for logging
+            session_id: Session UUID
+
+        Returns:
+            Tuple of (transactions, receipts)
+
+        Note:
+            Uses pdfplumber to extract text from the BytesIO stream.
+        """
+        transactions = []
+        receipts = []
+
+        # Extract text using pdfplumber from stream
+        text = ""
+        with pdfplumber.open(pdf_stream) as pdf:
+            for page in pdf.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text += page_text + "\n"
+
+        # Validate that we extracted some text
+        if not text or len(text.strip()) == 0:
+            raise Exception(f"Scanned image PDF not supported for {filename}. Please upload text-based PDF.")
+
+        # Debug logging
+        logger.info(f"[PDF_STREAM] Extracted {len(text)} characters from {filename}")
+
+        # Extract transactions using existing logic
+        transaction_dicts = await self._extract_credit_transactions(text)
+
+        # Add session_id to each transaction
+        for trans in transaction_dicts:
+            trans["session_id"] = session_id
+
+        transactions.extend(transaction_dicts)
+
+        # Receipts: For now, we don't extract receipts from card statements
+        # This could be extended in the future if needed
+
+        return transactions, receipts
 
     async def extract_employees(self, pdf_path: Path) -> List[Dict]:
         """
@@ -412,17 +572,34 @@ class ExtractionService:
             Uses pdfplumber for text extraction and regex patterns for parsing.
             Replaces placeholder implementation with real PDF extraction.
         """
-        # Extract text from PDF using pdfplumber (T016)
-        text = self._extract_text(pdf_path)
+        try:
+            # Track session for debug output
+            self._current_session_id = session_id
+            self._current_pdf_filename = pdf_path.name
+            self._current_pdf_size = pdf_path.stat().st_size
 
-        # Extract transactions using regex patterns (T018)
-        transactions = await self._extract_credit_transactions(text)
+            # Get page count for metadata
+            with pdfplumber.open(pdf_path) as pdf:
+                self._current_pdf_pages = len(pdf.pages)
 
-        # Add session_id to each transaction
-        for transaction in transactions:
-            transaction["session_id"] = session_id
+            # Extract text from PDF using pdfplumber (T016)
+            text = self._extract_text(pdf_path)
 
-        return transactions
+            # Extract transactions using regex patterns (T018)
+            transactions = await self._extract_credit_transactions(text)
+
+            # Add session_id to each transaction
+            for transaction in transactions:
+                transaction["session_id"] = session_id
+
+            return transactions
+
+        finally:
+            # Clear tracking variables
+            self._current_session_id = None
+            self._current_pdf_filename = None
+            self._current_pdf_size = None
+            self._current_pdf_pages = None
 
     async def extract_receipts(
         self, pdf_paths: List[Path], session_id: UUID
