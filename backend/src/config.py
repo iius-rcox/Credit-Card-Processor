@@ -98,6 +98,16 @@ class Settings(BaseSettings):
         description="Maximum number of files per upload"
     )
 
+    # Debug settings (development only)
+    DEBUG_EXTRACTION_OUTPUT: bool = Field(
+        default=False,
+        description="Enable debug file output for PDF extraction troubleshooting"
+    )
+    DEBUG_OUTPUT_PATH: str = Field(
+        default="./debug_output",
+        description="Directory for debug output files (organized by session ID)"
+    )
+
     # CORS settings
     CORS_ORIGINS: list[str] = Field(
         default=["http://localhost:3000", "http://localhost:3001", "https://credit-card.ii-us.com"],
