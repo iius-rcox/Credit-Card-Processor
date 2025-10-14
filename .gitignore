@@ -57,6 +57,11 @@ server/.venv/
 server/.pytest_cache/
 server/.mypy_cache/
 **/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
 
 # build artifacts / local outputs
 dist/
