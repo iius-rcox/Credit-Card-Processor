@@ -64,6 +64,12 @@ class ExtractionService:
         self.progress_tracker: Optional[ProgressTracker] = None
         self.progress_calculator = ProgressCalculator()
 
+        # Track current session for debug output
+        self._current_session_id: Optional[UUID] = None
+        self._current_pdf_filename: Optional[str] = None
+        self._current_pdf_size: Optional[int] = None
+        self._current_pdf_pages: Optional[int] = None
+
         # Compile regex patterns for performance (T017)
         # Updated for WEX Fleet card format (space-separated columns)
         # Format: Trans Date  Posted Date  Lvl  Transaction #  Merchant Name  City, State  Group  Description  ...  Net Cost
@@ -142,6 +148,18 @@ class ExtractionService:
         logger.info(f"[PDF_TEXT] First 5 lines:")
         for i, line in enumerate(text.split('\n')[:5], 1):
             logger.info(f"[PDF_TEXT]   Line {i}: {repr(line)[:100]}")
+
+        # Debug file output: Raw text extraction
+        if self._current_session_id:
+            from ..utils.debug_writer import write_debug_text
+
+            # Determine file type from content
+            file_name = "01_cardholder_text" if "Cardholder" in text[:500] else "02_receipt_text"
+            write_debug_text(
+                session_id=self._current_session_id,
+                file_name=file_name,
+                text=text
+            )
 
         return text
 
@@ -328,6 +346,55 @@ class ExtractionService:
         else:
             logger.warning("[EXTRACTION] No transactions extracted - regex pattern may not match PDF format")
 
+        # Debug file output: Regex processing results
+        if self._current_session_id:
+            from ..utils.debug_writer import write_debug_json
+
+            debug_data = {
+                "extraction_timestamp": datetime.utcnow().isoformat(),
+                "session_id": str(self._current_session_id),
+                "pdf_metadata": {
+                    "filename": self._current_pdf_filename or "unknown",
+                    "file_size_bytes": self._current_pdf_size or 0,
+                    "total_pages": self._current_pdf_pages or 0
+                },
+                "employee_name_found": employee_name,
+                "employee_id_resolved": str(employee_id) if employee_id else None,
+                "total_matches": len(transactions),
+                "incomplete_count": sum(1 for t in transactions if t.get("incomplete_flag")),
+                "credit_count": sum(1 for t in transactions if t.get("is_credit")),
+                "regex_patterns": {
+                    "employee_header": self.employee_header_pattern.pattern,
+                    "transaction": self.transaction_pattern.pattern
+                },
+                "sample_text": text[:1000],
+                "extracted_transactions": transactions[:10],  # First 10 only
+                "extraction_stats": {
+                    "text_length": len(text),
+                    "lines_processed": len(text.split('\n')),
+                    "pattern_matches": len(matches_list)
+                },
+                "match_statistics": {
+                    "total_lines_in_pdf": len(text.split('\n')),
+                    "lines_with_dates": len([l for l in text.split('\n') if self.date_pattern.search(l)]),
+                    "lines_with_amounts": len([l for l in text.split('\n') if self.amount_pattern.search(l)]),
+                    "successful_parses": len([t for t in transactions if not t.get("incomplete_flag")]),
+                    "failed_parses": len([t for t in transactions if t.get("incomplete_flag")]),
+                    "negative_amounts": len([t for t in transactions if t.get("is_credit")])
+                },
+                "sample_matches": {
+                    "first_matched_line": matches_list[0].group(0) if matches_list else None,
+                    "first_10_lines": text.split('\n')[5:15] if len(text.split('\n')) > 15 else text.split('\n')
+                }
+            }
+
+            file_name = "03_cardholder_regex_results" if "Cardholder" in text[:500] else "04_receipt_regex_results"
+            write_debug_json(
+                session_id=self._current_session_id,
+                file_name=file_name,
+                data=debug_data
+            )
+
         return transactions
 
     async def extract_employees(self, pdf_path: Path) -> List[Dict]:
@@ -412,17 +479,34 @@ class ExtractionService:
             Uses pdfplumber for text extraction and regex patterns for parsing.
             Replaces placeholder implementation with real PDF extraction.
         """
-        # Extract text from PDF using pdfplumber (T016)
-        text = self._extract_text(pdf_path)
+        try:
+            # Track session for debug output
+            self._current_session_id = session_id
+            self._current_pdf_filename = pdf_path.name
+            self._current_pdf_size = pdf_path.stat().st_size
 
-        # Extract transactions using regex patterns (T018)
-        transactions = await self._extract_credit_transactions(text)
+            # Get page count for metadata
+            with pdfplumber.open(pdf_path) as pdf:
+                self._current_pdf_pages = len(pdf.pages)
 
-        # Add session_id to each transaction
-        for transaction in transactions:
-            transaction["session_id"] = session_id
+            # Extract text from PDF using pdfplumber (T016)
+            text = self._extract_text(pdf_path)
 
-        return transactions
+            # Extract transactions using regex patterns (T018)
+            transactions = await self._extract_credit_transactions(text)
+
+            # Add session_id to each transaction
+            for transaction in transactions:
+                transaction["session_id"] = session_id
+
+            return transactions
+
+        finally:
+            # Clear tracking variables
+            self._current_session_id = None
+            self._current_pdf_filename = None
+            self._current_pdf_size = None
+            self._current_pdf_pages = None
 
     async def extract_receipts(
         self, pdf_paths: List[Path], session_id: UUID

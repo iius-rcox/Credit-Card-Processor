@@ -46,6 +46,8 @@ services:
       REDIS_PORT: 6379
       ENVIRONMENT: development
       LOG_LEVEL: DEBUG
+      DEBUG_EXTRACTION_OUTPUT: "true"
+      DEBUG_OUTPUT_PATH: /app/debug_output
     ports:
       - "8000:8000"
     volumes:
